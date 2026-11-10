@@ -1,0 +1,751 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<style>:root{padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}body{margin:0;font-size:14px}img{max-width:100%}[hidden]{display:none!important}</style>
+<title>OPTCG 配DON!!計算器</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400;500;700;900&family=JetBrains+Mono:wght@500;700&display=swap">
+<style>
+/* Layout: 牌桌——對手區在上、我方區在下，點卡片或數值開底部編輯面板；結果在牌桌下方 */
+:root{
+  --bg:#eef0ec; --panel:#fffdfa; --ink:#1d1a17; --muted:#6a655d; --line:#d8d3ca;
+  --mat:#d6e2dc; --mat-line:#b9cbc2; --cardface:#fffdf8;
+  --me:#1f5fa8; --me-soft:#e1ecf8; --op:#6b3fa0; --op-soft:#ece3f6; --don:#f28c00; --don-soft:#fdebd2; --don-ink:#2a1a00; --hp:#8e1b1b; --hp-soft:#f3dddd;
+  --good:#2e7d32; --good-soft:#e2f1e3; --warn:#a15c00; --warn-soft:#fbefd9; --bad:#b3261e; --bad-soft:#f9e0dd;
+  --f-body:"Noto Sans TC",system-ui,sans-serif; --f-num:"JetBrains Mono",ui-monospace,monospace;
+}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){
+  --bg:#151716; --panel:#1f2220; --ink:#ebe8e2; --muted:#a29d94; --line:#363a37;
+  --mat:#17241f; --mat-line:#2a3d35; --cardface:#252927;
+  --me:#7cb4f0; --me-soft:#17283d; --op:#c3a2ec; --op-soft:#2c2140; --don:#ffa53a; --don-soft:#3a2810; --don-ink:#2a1a00; --hp:#e06a6a; --hp-soft:#3a1c1c;
+  --good:#81c784; --good-soft:#1c2e1d; --warn:#ffb74d; --warn-soft:#352812; --bad:#ff8a80; --bad-soft:#3a1f1c; color-scheme:dark}}
+:root[data-theme="dark"]{
+  --bg:#151716; --panel:#1f2220; --ink:#ebe8e2; --muted:#a29d94; --line:#363a37;
+  --mat:#17241f; --mat-line:#2a3d35; --cardface:#252927;
+  --me:#7cb4f0; --me-soft:#17283d; --op:#c3a2ec; --op-soft:#2c2140; --don:#ffa53a; --don-soft:#3a2810; --don-ink:#2a1a00; --hp:#e06a6a; --hp-soft:#3a1c1c;
+  --good:#81c784; --good-soft:#1c2e1d; --warn:#ffb74d; --warn-soft:#352812; --bad:#ff8a80; --bad-soft:#3a1f1c; color-scheme:dark}
+body{background:var(--bg);color:var(--ink);font-family:var(--f-body);font-size:14px;line-height:1.55;
+  padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));padding-block:16px 40px}
+.wrap{max-width:760px;margin:0 auto;display:flex;flex-direction:column;gap:16px}
+h1{font-size:20px;font-weight:900;margin:0;text-wrap:balance}
+.sub{color:var(--muted);margin:2px 0 0;font-size:13px}
+.ex{font-size:11px;background:var(--warn-soft);color:var(--warn);padding:1px 8px;border-radius:999px;font-weight:700;margin-left:6px;vertical-align:middle}
+button{font-family:var(--f-body);cursor:pointer;color:inherit}
+:focus-visible{outline:2px solid var(--me);outline-offset:2px}
+
+/* 牌桌 */
+.table{background:var(--mat);border:1px solid var(--mat-line);border-radius:10px;padding:10px;display:flex;flex-direction:column;gap:8px}
+.zone{display:flex;flex-direction:column;gap:8px;--c:var(--op);--cs:var(--op-soft)}
+.zone.me{--c:var(--me);--cs:var(--me-soft)}
+.top{display:grid;grid-template-columns:1fr minmax(76px,96px) 1fr;gap:10px;align-items:center}
+.lead{background:none;border:none;padding:0;display:flex;flex-direction:column;align-items:center;gap:5px;min-width:0}
+.lead .card{width:100%;box-sizing:border-box}
+.lead .card .pw{font-size:clamp(16px,5vw,21px)}
+.handcap{font-size:12px;background:var(--panel);border:1px solid var(--line);border-radius:999px;padding:1px 10px;white-space:nowrap;max-width:46vw;overflow:hidden;text-overflow:ellipsis}
+.handcap b{font-family:var(--f-num);color:var(--c)}
+.stat{background:var(--panel);border:1px solid var(--line);border-top:3px solid var(--c);border-radius:8px;padding:8px 10px;text-align:center;display:flex;flex-direction:column;align-items:center;justify-content:center;min-width:0;width:100%;max-width:120px}
+.stat.sl{justify-self:end} .stat.sr{justify-self:start}
+.stat.hp{border-top-color:var(--hp)} .stat.dn{border-top-color:var(--don)}
+.stat.hp .v{color:var(--hp)} .stat.dn .v{color:var(--don)}
+.stat .l{font-size:11px;color:var(--muted);font-weight:700;letter-spacing:.04em}
+.stat .v{font-family:var(--f-num);font-weight:700;font-size:20px;line-height:1.2;font-variant-numeric:tabular-nums}
+.stat .s{font-size:11px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.chars{display:grid;grid-template-columns:repeat(5,1fr);gap:6px}
+.card{position:relative;aspect-ratio:63/88;max-width:100%;background:var(--cardface);border:1.5px solid var(--c);border-radius:6px;padding:4px;display:flex;flex-direction:column;align-items:center;justify-content:space-between;min-width:0}
+.card.leader{border-width:2.5px}
+.card.rest{border-style:dashed;opacity:.75}
+.card .cl{font-size:10px;color:var(--muted);align-self:flex-start;white-space:nowrap}
+.card .pw{font-family:var(--f-num);font-weight:700;font-size:clamp(13px,4vw,18px);color:var(--c);font-variant-numeric:tabular-nums}
+.card .bd{display:flex;flex-wrap:wrap;gap:2px;justify-content:center;min-height:16px}
+.card .bd i{font-style:normal;font-size:10px;font-weight:700;background:var(--cs);color:var(--c);border-radius:3px;padding:0 3px}
+.card .don{position:absolute;top:-9px;left:50%;transform:translateX(-50%);white-space:nowrap;background:var(--don);color:var(--don-ink);font-family:var(--f-num);font-size:11px;font-weight:700;border-radius:999px;padding:0 6px;line-height:18px}
+.cardw{position:relative;min-width:0}
+.cardw>.card{width:100%;box-sizing:border-box}
+.rm{position:absolute;top:-9px;right:-7px;width:24px;height:24px;border-radius:50%;border:1px solid var(--line);background:var(--panel);color:var(--muted);font-size:14px;line-height:1;padding:0;display:flex;align-items:center;justify-content:center;z-index:2}
+.rm:hover{color:var(--bad);border-color:var(--bad)}
+.card .cl{margin-top:6px}
+.slot{aspect-ratio:63/88;border:1.5px dashed var(--mat-line);border-radius:6px;background:transparent;color:var(--muted);font-size:22px;min-width:0}
+.slot.empty{cursor:default}
+
+.mid{display:flex;align-items:center;gap:8px;font-size:11px;color:var(--muted);padding:2px 0}
+.mid::before,.mid::after{content:"";flex:1;border-top:1px dashed var(--mat-line)}
+.mid b{display:inline-block;background:var(--don);color:var(--don-ink);border-radius:999px;padding:0 6px;font-family:var(--f-num);font-weight:700}
+
+/* 底部編輯面板 */
+.scrim{position:fixed;inset:0;background:rgba(0,0,0,.35);z-index:20}
+.sheet{position:fixed;left:0;right:0;bottom:0;z-index:21;background:var(--panel);border-top:3px solid var(--c,var(--don));border-radius:14px 14px 0 0;
+  max-height:82vh;overflow-y:auto;padding:14px max(16px,env(safe-area-inset-right,0px)) calc(16px + env(safe-area-inset-bottom,0px)) max(16px,env(safe-area-inset-left,0px));
+  box-shadow:0 -8px 30px rgba(0,0,0,.18)}
+.sheet-in{max-width:560px;margin:0 auto;display:flex;flex-direction:column;gap:12px}
+.sh-head{display:flex;justify-content:space-between;align-items:center}
+.sh-head h2{margin:0;font-size:17px;font-weight:900;color:var(--c)}
+.done{border:none;background:var(--c);color:var(--cardface);border-radius:6px;padding:8px 18px;font-weight:700;font-size:15px}
+.st{display:flex;align-items:center;justify-content:space-between;gap:10px}
+.stl{font-size:14px;font-weight:500}
+.stc{display:grid;grid-template-columns:44px 84px 44px;gap:4px}
+.stc button{height:44px;border:1px solid var(--line);background:var(--bg);border-radius:6px;font-size:22px;line-height:1}
+.stc input{height:44px;text-align:center;font-family:var(--f-num);font-size:17px;font-weight:700;border:1px solid var(--line);border-radius:6px;background:var(--bg);color:var(--ink);width:100%;box-sizing:border-box;min-width:0}
+.sws{display:grid;grid-template-columns:1fr 1fr;gap:6px}
+.sw{display:flex;align-items:center;justify-content:space-between;gap:8px;border:1px solid var(--line);background:var(--bg);border-radius:6px;padding:10px 12px;font-size:14px;text-align:left}
+.sw i{width:34px;height:20px;border-radius:999px;background:var(--line);position:relative;flex:none;transition:background .15s}
+.sw i::after{content:"";position:absolute;top:2px;left:2px;width:16px;height:16px;border-radius:50%;background:var(--cardface);transition:transform .15s}
+.sw[aria-pressed="true"] i{background:var(--c)}
+.sw[aria-pressed="true"] i::after{transform:translateX(14px)}
+.lkrow{display:flex;flex-direction:column;gap:4px}
+.lkev{justify-content:flex-end}
+.seg{display:inline-flex;border:1px solid var(--line);border-radius:8px;overflow:hidden}
+.seg button{border:none;border-left:1px solid var(--line);background:var(--bg);font-family:var(--f-num);font-size:13px;font-weight:700;padding:8px 8px;min-width:38px;color:var(--muted)}
+.seg button:first-child,.seg button:last-child{font-family:var(--f-body)}
+.seg button:first-child{border-left:none}
+.seg button[aria-pressed="true"]{background:var(--c);color:var(--cardface)}
+.icos{display:inline-flex;gap:6px;margin-left:auto}
+.ico{position:relative;width:38px;height:38px;border-radius:8px;border:1.5px solid var(--line);background:var(--bg);color:var(--muted);font-family:var(--f-body);font-weight:900;font-size:17px;line-height:1;padding:0;opacity:.55}
+.ico[aria-pressed="true"]{opacity:1}
+.i-da[aria-pressed="true"]{border-color:var(--c,var(--me));color:var(--c,var(--me));background:var(--cs,var(--me-soft))}
+.i-ub::after{content:"";position:absolute;left:6px;right:6px;top:50%;height:2.5px;margin-top:-1px;background:var(--muted);transform:rotate(-35deg);border-radius:2px}
+.i-ub[aria-pressed="true"]{border-color:var(--hp);color:var(--ink)}
+.i-ub[aria-pressed="true"]::after{background:var(--hp)}
+.card .bd i.ubb{position:relative}
+.card .bd i.ubb::after{content:"";position:absolute;left:1px;right:1px;top:50%;height:1.5px;background:var(--hp);transform:rotate(-35deg)}
+.note{font-size:12px;color:var(--muted);margin:0}
+.evrow{border:1px solid var(--line);border-radius:8px;padding:8px 10px;display:flex;flex-direction:column;gap:6px}
+.evtop{display:grid;grid-template-columns:1fr auto;gap:8px}
+.evtop input{font-family:var(--f-body);font-size:14px;padding:6px 8px;border:1px solid var(--line);border-radius:6px;background:var(--bg);color:var(--ink);min-width:0}
+.evfmt{display:flex;flex-wrap:wrap;align-items:center;gap:4px;font-family:var(--f-num);font-weight:700;font-size:15px}
+.evfmt input{width:44px;height:38px;text-align:center;font-family:var(--f-num);font-size:15px;font-weight:700;border:1px solid var(--line);border-radius:6px;background:var(--bg);color:var(--ink);padding:0;box-sizing:border-box}
+.evfmt input.w{width:64px}
+.evfmt .sep{color:var(--muted)}
+.evadd{display:flex;flex-wrap:wrap;gap:6px}
+.evbox{border:1px solid var(--line);border-radius:8px;padding:10px;display:flex;flex-direction:column;gap:8px}
+.evbox input[type=text]{font-family:var(--f-body);font-size:14px;padding:8px;border:1px solid var(--line);border-radius:6px;background:var(--bg);color:var(--ink);min-width:0}
+.evhead{display:grid;grid-template-columns:1fr auto;gap:8px}
+.ghost{border:1px dashed var(--c);background:transparent;color:var(--c);border-radius:6px;padding:8px 12px;font-size:14px}
+.danger{border:1px solid var(--bad);background:transparent;color:var(--bad);border-radius:6px;padding:8px 12px;font-size:14px}
+.sh-t{font-size:11px;letter-spacing:.08em;color:var(--muted);font-weight:700}
+
+/* 速攻設定 */
+.rush{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+@media (max-width:560px){.rush{grid-template-columns:1fr}}
+.rbox{background:var(--panel);border:1px solid var(--line);border-top:3px solid var(--c);border-radius:8px;padding:12px;display:flex;flex-direction:column;gap:8px;min-width:0}
+.rbox.me{--c:var(--me);--cs:var(--me-soft)} .rbox.op{--c:var(--op);--cs:var(--op-soft)}
+.rbox h3{margin:0;font-size:15px;font-weight:900;color:var(--c)}
+.rbox .ghost{align-self:flex-start}
+/* 結果 */
+.res{display:flex;flex-direction:column;gap:14px}
+.row{display:flex;flex-wrap:wrap;gap:8px}
+label.f{display:flex;flex-direction:column;gap:2px;font-size:12px;color:var(--muted);min-width:0}
+select{font-family:var(--f-body);font-size:14px;padding:8px;border:1px solid var(--line);border-radius:6px;background:var(--panel);color:var(--ink)}
+.banner{border-radius:8px;padding:14px 16px;border:1px solid var(--bc);background:var(--bs)}
+.banner .k{font-size:11px;letter-spacing:.08em;font-weight:700;color:var(--bc)}
+.banner .v{font-size:18px;font-weight:900;margin-top:2px;text-wrap:balance}
+.banner p{margin:4px 0 0}
+.b-good{--bc:var(--good);--bs:var(--good-soft)} .b-warn{--bc:var(--warn);--bs:var(--warn-soft)} .b-bad{--bc:var(--bad);--bs:var(--bad-soft)}
+.cards2{display:grid;grid-template-columns:1fr;gap:14px}
+.box{background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:14px;min-width:0;display:flex;flex-direction:column;gap:10px}
+.box h3{margin:0;font-size:15px;font-weight:900}
+.kv{display:grid;grid-template-columns:auto 1fr;gap:4px 12px;align-items:baseline;margin:0}
+.kv dt{color:var(--muted);font-size:12px} .kv dd{margin:0;font-family:var(--f-num);font-weight:700}
+.grp-t{font-size:11px;letter-spacing:.08em;color:var(--muted);font-weight:700}
+.combos{display:flex;flex-wrap:wrap;gap:6px}
+.combo{display:inline-flex;flex-direction:column;font-family:var(--f-num);font-weight:700;font-size:15px;padding:6px 12px;border-radius:6px;background:var(--op-soft);color:var(--op)}
+.combo small{font-family:var(--f-body);font-size:11px;font-weight:500;color:var(--muted)}
+.combo.over{background:var(--good-soft);color:var(--good)}
+.hint{font-size:12px;color:var(--muted);margin:0}
+.tbl{overflow-x:auto}
+table{border-collapse:collapse;width:100%;font-size:13px}
+th,td{padding:5px 8px;border-bottom:1px solid var(--line);text-align:left;white-space:nowrap}
+th{font-size:11px;color:var(--muted);font-weight:700;letter-spacing:.04em}
+td.num{font-family:var(--f-num);font-variant-numeric:tabular-nums;text-align:right}
+.pill{display:inline-block;font-size:11px;padding:1px 7px;border-radius:999px;font-weight:700}
+.p-take{background:var(--bad-soft);color:var(--bad)} .p-blk{background:var(--op-soft);color:var(--op)}
+.p-cnt{background:var(--warn-soft);color:var(--warn)} .p-fail{background:var(--good-soft);color:var(--good)}
+.alt td{color:var(--muted)}
+details{background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:10px 14px}
+summary{cursor:pointer;font-weight:700}
+details ul{margin:8px 0 0;padding-left:20px;color:var(--muted)}
+@media (prefers-reduced-motion:reduce){*{transition:none!important}}
+</style>
+
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <h1>航海王TCG 配DON!!計算器 <span class="ex" id="exTag">範例盤面</span></h1>
+    <p class="sub">點角色改力量和能力，點領導者改手牌，HP 和 DON!! 在領導者兩側。紫色標籤是算出來的DON!!配法。</p>
+  </header>
+
+  <div class="table" id="table">
+    <section class="zone op" id="zone-op" aria-label="對手場面"></section>
+    <div class="mid"><span><b>+N</b> 我方：這回合最大壓力配法　對手：下回合最強配法</span></div>
+    <section class="zone me" id="zone-me" aria-label="我方場面"></section>
+  </div>
+
+  <div class="rush" id="rushPanels" aria-label="速攻角色設定"></div>
+
+  <div class="res" id="res"></div>
+
+  <details>
+    <summary>計算假設（看結果前請讀）</summary>
+    <ul>
+      <li>【速攻】：角色登場的回合也可以攻擊（官方綜合規則 10-1-1-1）。在牌桌下方的速攻卡片設定雙方的速攻角色。</li>
+      <li>點領導者可設定領導者力量和手牌；HP、DON!! 在領導者兩側。</li>
+      <li>反擊事件格式：費用C / +力量 / 張數 / 棄幾張手牌。「棄手牌的刀」要額外丟掉手牌，丟掉的牌也算進張數。</li>
+      <li>卡片上「攻」= 會攻擊、「擋」= 阻擋者、「雙」= 雙重攻擊、劃紅線的「擋」= 不可被阻擋；虛線框 = 不攻擊。圖示灰色 = 沒有這個能力，點一下切換。</li>
+      <li>攻擊一律打領導者，不算打角色、KO、效果、觸發（觸發可能直接翻盤）。</li>
+      <li>假設防守方看得到你全部配法再決定怎麼擋（最保守）。實戰你可以攻擊之間再貼DON!!，所以先攻擊再決定DON!!通常比這裡算的更好。</li>
+      <li>攻擊力 ≥ 防守力就命中；所以需要的反擊值 = 攻擊力 − 防守力 + 1000。</li>
+      <li>阻擋者：每隻可擋一次任一可被阻擋的攻擊。你這回合有攻擊的角色會橫置，下回合不能阻擋。</li>
+      <li>「受傷拿到的生命卡」選項把每張吃下的生命卡當成一張反擊加入手牌，對防守方偏樂觀。</li>
+      <li>反擊事件可填多種，每種各自的張數、力量、費用；同一下攻擊可疊多張事件，總費用受防守方剩餘DON!!限制。事件的其他效果（KO、休息等）不計。</li>
+    </ul>
+  </details>
+</div>
+
+<div class="scrim" id="scrim" hidden></div>
+<div class="sheet" id="sheet" role="dialog" aria-modal="true" aria-labelledby="sh-title" hidden><div class="sheet-in" id="sheet-in"></div></div>
+
+<script>
+const S = {
+  me:{ leader:5000, lda:false, lub:false, life:2, hand:4, c2:1, c1:2, evs:[], rush:[], don:10, defDon:0, lk:[], lke:[],
+       chars:[{p:5000,atk:true,blk:false,da:false,ub:false},{p:7000,atk:true,blk:false,da:false,ub:false},{p:7000,atk:true,blk:false,da:false,ub:false},{p:3000,atk:false,blk:true,da:false,ub:false}] },
+  op:{ leader:5000, lda:false, lub:false, life:1, hand:5, c2:0, c1:0, unknown:true, evs:[], rush:[], defDon:0, nextDon:10, lk:[], lke:[],
+       chars:[{p:5000,atk:true,blk:false,da:false,ub:false},{p:7000,atk:true,blk:false,da:false,ub:false},{p:7000,atk:true,blk:false,da:false,ub:false},{p:3000,atk:false,blk:true,da:false,ub:false}] },
+  lifeV:-1
+};
+let touched=false, sheet=null, opener=null, lastBest=null, lastWorst=null;
+const $=id=>document.getElementById(id);
+const fmtN=n=>n.toLocaleString('en-US');
+
+/* ---------- 牌桌 ---------- */
+function donFor(side,i){
+  const r=side==='me'?lastBest:lastWorst; if(!r) return 0;
+  const map=[-1].concat(S[side].chars.map((c,k)=>c.atk?k:null).filter(k=>k!==null));
+  const at=map.indexOf(i); return at<0?0:r.alloc[at]||0;
+}
+function cardTile(side,i,asSpan){
+  const d=S[side], L=i<0;
+  const c=L?{p:d.leader,atk:true,blk:false,da:d.lda,ub:d.lub}:d.chars[i];
+  const b=[]; if(!L&&c.atk)b.push('攻'); if(c.blk)b.push('擋'); if(c.da)b.push('雙'); if(c.ub)b.push('!擋');
+  const don=donFor(side,i);
+  const name=L?'領導者':'角色'+(i+1);
+  const inner=`<span class="cl">${name}</span><span class="pw">${c.p}</span>
+    <span class="bd">${b.map(x=>x[0]==='!'?`<i class="ubb">${x.slice(1)}</i>`:`<i>${x}</i>`).join('')}</span>${don?`<span class="don">+${don}</span>`:''}`;
+  const cls=`card${L?' leader':''}${!L&&!c.atk?' rest':''}`;
+  if(asSpan) return `<span class="${cls}">${inner}</span>`;
+  return `<button class="${cls}" id="${side}-card${i}" data-open="card" data-s="${side}" data-i="${i}"
+    aria-label="${side==='me'?'我方':'對手'}${name}，力量${c.p}${b.length?'，'+b.join('、'):''}${don?'，配DON!! '+don:''}">${inner}</button>`;
+}
+function renderZone(side){
+  const d=S[side], me=side==='me';
+  const slots=[];
+  for(let k=0;k<5;k++){
+    if(k<d.chars.length) slots.push(`<div class="cardw">${cardTile(side,k)}<button class="rm" id="${side}-rm${k}" data-rm="${side}" data-i="${k}" aria-label="移除${me?'我方':'對手'}角色${k+1}">×</button></div>`);
+    else if(k===d.chars.length) slots.push(`<button class="slot" id="${side}-add" data-addchar="${side}" aria-label="新增角色">＋</button>`);
+    else slots.push('<span class="slot empty" aria-hidden="true"></span>');
+  }
+  const hasEv=d.evs.some(v=>v.n>0), hasRush=false;
+  const handSub=((!me&&d.unknown)?('未知'+(hasEv?'・事件':'')):`2k×${d.c2} 1k×${d.c1}${hasEv?' 事件':''}`)+(hasRush?'・速攻':'');
+  const don=donFor(side,-1);
+  const lead=`<button class="lead" id="${side}-lead" data-open="leader" data-s="${side}" data-i="-1"
+      aria-label="${me?'我方':'對手'}領導者，力量${d.leader}，手牌${d.hand}張${don?'，配DON!! '+don:''}，點擊設定領導者與手牌">
+      ${cardTile(side,-1,true)}<span class="handcap">手牌 <b>${d.hand}</b> ${handSub}</span></button>`;
+  const hp=(pos)=>`<button class="stat hp ${pos}" id="${side}-st-life" data-open="life" data-s="${side}"><span class="l">HP</span><span class="v">${d.life}</span><span class="s">${(()=>{const k=(d.lk||[]).slice(0,d.life).filter(v=>v==='e'||v>0);return k.length?'已知 '+k.map(v=>v==='e'?'事件':v/1000+'k').join(' '):'生命';})()}</span></button>`;
+  const dn=(pos)=>`<button class="stat dn ${pos}" id="${side}-st-don" data-open="don" data-s="${side}"><span class="l">${me?'可貼DON!!':'剩餘DON!!'}</span><span class="v">${me?d.don:d.defDon}</span><span class="s">${me?'守備 '+d.defDon:'下回合 '+d.nextDon}</span></button>`;
+  $('zone-'+side).innerHTML=me
+    ?`<div class="chars">${slots.join('')}</div><div class="top">${dn('sl')+lead+hp('sr')}</div>`
+    :`<div class="top">${hp('sl')+lead+dn('sr')}</div><div class="chars">${slots.join('')}</div>`;
+}
+function renderBoard(){renderZone('op');renderZone('me');}
+function renderRush(){
+  const panel=(side)=>{
+    const d=S[side], me=side==='me';
+    const rows=d.rush.map((v,j)=>{const P=`${side}.rush.${j}`,id=`${side}-rush${j}`;
+      const num=(k,mn,mx,cls,st)=>`<input type="number" inputmode="numeric" id="${id}-${k}" class="${cls||''}" data-set="${P}.${k}" data-min="${mn}" data-max="${mx}" ${st?`step="${st}"`:''} value="${v[k]||0}" aria-label="速攻${j+1} ${k}">`;
+      return `<div class="evrow"><div class="evtop">
+        <input type="text" id="${id}-name" data-text="${P}.name" value="${v.name.replace(/"/g,'&quot;')}" placeholder="名稱（選填）" aria-label="速攻角色${j+1}名稱">
+        <button class="danger" id="${id}-del" data-s="${side}" data-delrush="${j}" aria-label="移除速攻角色${j+1}">移除</button></div>
+        <div class="evfmt">${num('cost',0,10)}<span>C</span><span class="sep">/</span>${num('p',0,15000,'w',1000)}<span class="sep">/</span>${num('n',0,4)}<span>張${me?'':'(MAX)'}</span><span class="icos">${ico(`${P}.da`,'da')}${ico(`${P}.ub`,'ub')}</span></div></div>`;}).join('');
+    return `<section class="rbox ${side}"><h3>${me?'我方':'敵方'}【速攻】角色</h3>
+      <p class="note">${me?'手上可下的速攻角色。費用從這回合 DON!! 扣，程式會比較下或不下哪個壓力大。':'對手下回合可能下的速攻角色。費用從對手下回合 DON!! 扣，取對你最不利的打法。'}</p>
+      ${rows||'<p class="note">還沒有設定。</p>'}
+      ${d.rush.length<4?`<button class="ghost" id="${side}-addrush" data-addrush="${side}">＋ 速攻角色</button>`:''}</section>`;
+  };
+  $('rushPanels').innerHTML=panel('me')+panel('op');
+}
+
+/* ---------- 編輯面板 ---------- */
+function getP(path){return path.split('.').reduce((o,k)=>o[k],S);}
+function setP(path,v){const ks=path.split('.'),last=ks.pop();ks.reduce((o,k)=>o[k],S)[last]=v;}
+function stepper(path,label,step,min,max){
+  const id=path.replace(/\./g,'-');
+  return `<div class="st"><span class="stl">${label}</span><div class="stc">
+    <button id="${id}-m" data-step="${path}" data-d="${-step}" data-min="${min}" data-max="${max}" aria-label="${label}減少">−</button>
+    <input type="number" inputmode="numeric" id="${id}-v" data-set="${path}" data-min="${min}" data-max="${max}" value="${getP(path)}" aria-label="${label}">
+    <button id="${id}-p" data-step="${path}" data-d="${step}" data-min="${min}" data-max="${max}" aria-label="${label}增加">＋</button></div></div>`;
+}
+function ico(path,kind){
+  const on=!!getP(path), da=kind==='da';
+  return `<button class="ico ${da?'i-da':'i-ub'}" id="${path.replace(/\./g,'-')}-ico" data-sw="${path}" aria-pressed="${on}" aria-label="${da?'雙重攻擊':'不可被阻擋'}" title="${da?'雙重攻擊':'不可被阻擋'}">${da?'雙':'擋'}</button>`;
+}
+function sw(path,label){
+  return `<button class="sw" id="${path.replace(/\./g,'-')}-sw" data-sw="${path}" aria-pressed="${!!getP(path)}"><span>${label}</span><i></i></button>`;
+}
+function renderSheet(){
+  if(!sheet) return;
+  const {type,side,i}=sheet, d=S[side], me=side==='me', who=me?'我方':'對手';
+  $('sheet').style.setProperty('--c',`var(--${side})`);$('sheet').style.setProperty('--cs',`var(--${side}-soft)`);
+  let title='',body='';
+  const handBody=()=>{
+    let h=stepper(`${side}.hand`,'手牌張數',1,0,20);
+    const unk=!me&&d.unknown;
+    if(!me) h+=`<div class="sws">${sw('op.unknown','手牌內容未知')}</div>`;
+    const evList=d.evs.map((v,j)=>{const P=`${side}.evs.${j}`,id=`${side}-ev${j}`;
+      const num=(k,mn,mx,cls,st)=>`<input type="number" inputmode="numeric" id="${id}-${k}" class="${cls||''}" data-set="${P}.${k}" data-min="${mn}" data-max="${mx}" ${st?`step="${st}"`:''} value="${v[k]||0}" aria-label="事件${j+1} ${k}">`;
+      return `<div class="evrow"><div class="evtop">
+        <input type="text" id="${id}-name" data-text="${P}.name" value="${v.name.replace(/"/g,'&quot;')}" placeholder="名稱（選填）" aria-label="事件${j+1}名稱">
+        <button class="danger" id="${id}-del" data-delev="${j}" aria-label="移除事件${j+1}">移除</button></div>
+        <div class="evfmt">${num('cost',0,10)}<span>C</span><span class="sep">/</span>${num('val',0,10000,'w',1000)}<span class="sep">/</span>${num('n',0,10)}<span>張${unk?'(MAX)':''}</span><span class="sep">/</span><span>棄</span>${num('disc',0,5)}</div></div>`;}).join('');
+    const evSec=`<div class="sh-t">${unk?'對手牌組可能有的反擊事件':'反擊事件'}　<span style="font-weight:400;letter-spacing:0">費用C / +力量 / 張數 / 要棄幾張手牌</span></div>${evList}
+      ${d.evs.length<5?`<div class="evadd"><button class="ghost" id="addev" data-addev="normal">＋ 反擊事件</button><button class="ghost" id="addblade" data-addev="blade">＋ 棄手牌的刀</button></div>`:''}`;
+    const rushSec='';
+    if(!unk){
+      const used=d.c2+d.c1+d.evs.reduce((a,v)=>a+v.n,0);
+      h+=stepper(`${side}.c2`,'2000反擊',1,0,20)+stepper(`${side}.c1`,'1000反擊',1,0,20)+evSec+
+        `<p class="note" style="${used>d.hand?'color:var(--warn)':''}">反擊牌合計 ${used} 張${used>d.hand?'，超過手牌張數':`，其餘 ${d.hand-used} 張當作沒有反擊值（可拿來棄）`}。</p>`+rushSec;
+    }else h+='<p class="note">只用手牌張數判斷。結果會列出對手要有哪些反擊組合才擋得住。</p>'+evSec+
+      '<p class="note">事件會算進組合，例如「1C/4000×1 + 1000×1」。費用受對手剩餘 DON!! 限制；要棄的手牌也算進張數。</p>'+rushSec;
+    return h;
+  };
+  if(type==='leader'){
+    title=who+'領導者・手牌';
+    body=stepper(`${side}.leader`,'領導者力量',1000,0,20000)+
+      `<div class="st"><span class="stl">能力</span><span class="icos">${ico(`${side}.lda`,'da')}${ico(`${side}.lub`,'ub')}</span></div><div class="sh-t">手牌</div>`+handBody();
+  }else if(type==='card'){
+    title=`${who}角色${i+1}`; const p=`${side}.chars.${i}`;
+    body=stepper(`${p}.p`,'力量',1000,0,20000)+
+      `<div class="st"><span class="stl">能力</span><span class="icos">${ico(`${p}.da`,'da')}${ico(`${p}.ub`,'ub')}</span></div>
+      <div class="sws">${sw(`${p}.atk`,me?'這回合攻擊':'下回合攻擊')}${sw(`${p}.blk`,'阻擋者')}</div>
+      <p class="note">${me?'這回合有攻擊的角色會橫置，算下回合防守時不能阻擋。':'阻擋者會用來擋你這回合的攻擊。'}</p>
+      <button class="danger" id="delchar" data-delchar="${i}">移除這張角色</button>`;
+  }else if(type==='life'){
+    title=who+'HP';
+    while(d.lk.length<d.life) d.lk.push(-1);
+    const opts=[[-1,'未知'],[0,'0'],[1000,'1k'],[2000,'2k'],['e','事件']];
+    body=stepper(`${side}.life`,'剩餘生命',1,0,10)+'<p class="note">生命 0 時再被打中一次就輸。</p>'+
+      (d.life?`<div class="sh-t">已知的生命卡反擊值　<span style="font-weight:400;letter-spacing:0">由上往下，吃血先拿最上面</span></div>`+
+      Array.from({length:d.life},(_,q)=>{
+        if(d.lk[q]==='e'&&!d.lke[q]) d.lke[q]={val:2000,cost:1,disc:0};
+        const ev=d.lk[q]==='e'?`<div class="evfmt lkev"><input type="number" inputmode="numeric" id="${side}-lke${q}-cost" data-set="${side}.lke.${q}.cost" data-min="0" data-max="10" value="${d.lke[q].cost}" aria-label="第${q+1}張生命事件費用"><span>C</span><span class="sep">/</span><input type="number" inputmode="numeric" class="w" step="1000" id="${side}-lke${q}-val" data-set="${side}.lke.${q}.val" data-min="0" data-max="10000" value="${d.lke[q].val}" aria-label="第${q+1}張生命事件力量"><span class="sep">/</span><span>棄</span><input type="number" inputmode="numeric" id="${side}-lke${q}-disc" data-set="${side}.lke.${q}.disc" data-min="0" data-max="5" value="${d.lke[q].disc||0}" aria-label="第${q+1}張生命事件要棄幾張手牌"></div>`:'';
+        return `<div class="lkrow"><div class="st"><span class="stl">第 ${q+1} 張${q===0?'（最上面）':''}</span><span class="seg" role="group" aria-label="第${q+1}張生命卡">${
+        opts.map(([v,l])=>`<button id="${side}-lk${q}-${v}" data-lk="${side}.${q}" data-v="${v}" aria-pressed="${d.lk[q]===v}">${l}</button>`).join('')}</span></div>${ev}</div>`;}).join('')+
+      '<p class="note">「未知」的生命卡算成一張內容未知的手牌。「事件」填費用 / 力量 / 要棄幾張手牌，拿到後可以當反擊事件用；費用受 DON!! 限制，棄的手牌算進張數。</p>':'');
+  }else if(type==='don'){
+    title=who+'DON!!';
+    body=me?stepper('me.don','這回合可貼DON!!',1,0,10)+stepper('me.defDon','對手回合可用DON!!（付反擊事件）',1,0,10)
+           :stepper('op.defDon','現在剩餘DON!!（付反擊事件）',1,0,10)+stepper('op.nextDon','下回合可貼DON!!',1,0,10);
+  }
+  const keep=document.activeElement&&document.activeElement.id;
+  $('sheet-in').innerHTML=`<div class="sh-head"><h2 id="sh-title">${title}</h2><button class="done" id="sh-done" data-close="1">完成</button></div>${body}`;
+  const f=keep&&$(keep); if(f&&$('sheet').contains(f)) f.focus();
+}
+function openSheet(type,side,i,btn){
+  sheet={type,side,i};opener=btn&&btn.id;renderSheet();$('scrim').hidden=false;$('sheet').hidden=false;$('sh-done').focus();
+}
+function closeSheet(){
+  sheet=null;$('scrim').hidden=true;$('sheet').hidden=true;const o=opener&&$(opener);if(o)o.focus();
+}
+function changed(reSheet){markTouched();renderBoard();if(reSheet)renderSheet();schedule();}
+function clamp(v,mn,mx){return Math.min(mx,Math.max(mn,v));}
+
+document.addEventListener('click',e=>{
+  const t=e.target.closest('button,[data-close]')||e.target;
+  if(t.id==='scrim'||t.dataset.close){closeSheet();return;}
+  if(t.dataset.open){openSheet(t.dataset.open,t.dataset.s,+(t.dataset.i??-1),t);return;}
+  if(t.dataset.rm){const sd=t.dataset.rm;S[sd].chars.splice(+t.dataset.i,1);changed();const a=$(`${sd}-add`)||$(`${sd}-lead`);if(a)a.focus();return;}
+  if(t.dataset.addchar){const s=t.dataset.addchar;S[s].chars.push({p:5000,atk:s==='me',blk:false,da:false,ub:false});changed();
+    openSheet('card',s,S[s].chars.length-1,$(`${s}-card${S[s].chars.length-1}`));return;}
+  if(t.dataset.step){const v=clamp((+getP(t.dataset.step)||0)+(+t.dataset.d),+t.dataset.min,+t.dataset.max);setP(t.dataset.step,v);changed(true);return;}
+  if(t.dataset.sw){setP(t.dataset.sw,!getP(t.dataset.sw));t.setAttribute('aria-pressed',!!getP(t.dataset.sw));changed(true);return;}
+  if(t.dataset.delchar!==undefined){const sd=sheet.side;S[sd].chars.splice(+t.dataset.delchar,1);opener=null;closeSheet();changed();const a=$(`${sd}-add`);if(a)a.focus();return;}
+  if(t.dataset.lk){const [sd,q]=t.dataset.lk.split('.');S[sd].lk[+q]=t.dataset.v==='e'?'e':+t.dataset.v;changed(true);return;}
+  if(t.dataset.addrush){S[t.dataset.addrush].rush.push({name:'',n:1,p:6000,cost:4,da:false,ub:false});markTouched();renderRush();schedule();
+    const f=$(`${t.dataset.addrush}-rush${S[t.dataset.addrush].rush.length-1}-cost`);if(f)f.focus();return;}
+  if(t.dataset.delrush!==undefined){S[t.dataset.s].rush.splice(+t.dataset.delrush,1);markTouched();renderRush();schedule();const a=$(`${t.dataset.s}-addrush`);if(a)a.focus();return;}
+  if(t.dataset.addev){S[sheet.side].evs.push(t.dataset.addev==='blade'?{name:'刀',n:1,val:3000,cost:0,disc:1}:{name:'',n:1,val:2000,cost:1,disc:0});changed(true);return;}
+  if(t.dataset.delev!==undefined){S[sheet.side].evs.splice(+t.dataset.delev,1);changed(true);return;}
+});
+document.addEventListener('input',e=>{
+  const t=e.target;
+  if(t.dataset.set){const v=clamp(parseInt(t.value)||0,+t.dataset.min,+t.dataset.max);setP(t.dataset.set,v);markTouched();renderBoard();schedule();return;}
+  if(t.dataset.text){setP(t.dataset.text,t.value);markTouched();schedule();return;}
+});
+document.addEventListener('change',e=>{
+  if(e.target.dataset.set) e.target.value=getP(e.target.dataset.set);
+});
+document.addEventListener('keydown',e=>{if(e.key==='Escape'&&sheet)closeSheet();});
+function markTouched(){if(!touched){touched=true;const x=$('exTag');if(x)x.hidden=true;}}
+let timer; function schedule(){clearTimeout(timer);timer=setTimeout(compute,120);}
+
+/* ---------- 引擎 ---------- */
+function needOf(p,dp){return p>=dp?Math.floor((p-dp)/1000)*1000+1000:0;}
+function survives(dmgs,life){ if(!dmgs.length) return true; const sum=dmgs.reduce((a,b)=>a+b,0), mn=Math.min(...dmgs); return sum-mn<life; }
+
+// 吃 h 下會拿到最上面 h 張生命卡：已知的照設定，未知的照「生命卡當作」選項
+function lifeGain(def,h){
+  const g={k2:0,k1:0,unk:0,cred:0,evs:[]};
+  for(let q=0;q<h;q++){
+    const v=(def.lk&&def.lk[q]!==undefined)?def.lk[q]:-1;
+    if(v===2000) g.k2++; else if(v===1000) g.k1++; else if(v===-1) g.unk++;
+    else if(v==='e'){const e=(def.lke&&def.lke[q])||{val:2000,cost:1,disc:0};g.evs.push({name:'生命事件',n:1,val:e.val,cost:e.cost,disc:e.disc||0,life:true});}
+  }
+  if(S.lifeV===2000) g.k2+=g.unk; if(S.lifeV===1000) g.k1+=g.unk;
+  g.cred=g.k2+g.k1+g.evs.length; // 當成反擊用的生命卡
+  return g;
+}
+// 用手牌最少張數擋下所有需求；回傳 {cards, picks} 或 null
+function solveCards(needs,def,hits){
+  const lg=lifeGain(def,hits), n2=def.c2+lg.k2, n1=def.c1+lg.k1; // lg.evs：拿到的已知生命事件
+  const evs=def.evs.filter(v=>v.n>0&&v.val>0).concat(lg.evs), K=evs.length;
+  const memo=new Map();
+  function f(i,a2,a1,ae,d){
+    if(i===needs.length) return {cards:0,picks:[]};
+    const key=i+'|'+a2+'|'+a1+'|'+ae.join(',')+'|'+d; if(memo.has(key)) return memo.get(key);
+    const c=needs[i]; let best=null; const use=new Array(K).fill(0);
+    // 逐種事件決定這一下用幾張，再補 2000/1000 反擊
+    (function pick(j,power,cost,cnt){
+      if(j===K){
+        for(let t=0;t<=a2;t++){
+          const rem=c-power-t*2000, o=rem>0?Math.ceil(rem/1000):0;
+          if(o<=a1){
+            const sub=f(i+1,a2-t,a1-o,ae.map((x,q)=>x-use[q]),d-cost);
+            if(sub){const tot=sub.cards+cnt+t+o; if(!best||tot<best.cards) best={cards:tot,picks:[{ev:use.slice(),t,o}].concat(sub.picks)};}
+          }
+          if(rem<=0) break;
+        }
+        return;
+      }
+      for(let e=0;e<=ae[j];e++){
+        if(cost+e*evs[j].cost>d) break;
+        use[j]=e; pick(j+1,power+e*evs[j].val,cost+e*evs[j].cost,cnt+e*(1+(evs[j].disc||0)));
+        if(power+e*evs[j].val>=c) break;
+      }
+      use[j]=0;
+    })(0,0,0,0);
+    memo.set(key,best); return best;
+  }
+  const out=f(0,n2,n1,evs.map(v=>v.n),def.dDon);
+  if(out) out.evs=evs;
+  return out;
+}
+
+function defend(atks,def){
+  const live=atks.map((a,i)=>({...a,i,need:needOf(a.p,def.power)})).filter(a=>a.need>0);
+  const k=live.length;
+  let bestReq=null, bestHand=null;
+  for(let m=0;m<(1<<k);m++){
+    const take=[],rest=[];
+    live.forEach((a,j)=>((m>>j)&1?take:rest).push(a));
+    if(!survives(take.map(a=>a.da?2:1),def.life)) continue;
+    const blockable=rest.filter(a=>!a.ub).sort((x,y)=>y.need-x.need);
+    const blocked=new Set(blockable.slice(0,def.blockers).map(a=>a.i));
+    const cnt=rest.filter(a=>!blocked.has(a.i)).sort((x,y)=>y.need-x.need);
+    const req=cnt.reduce((s,a)=>s+a.need,0);
+    if(!bestReq||req<bestReq.req) bestReq={req,take,blocked,cnt};
+    const sol=solveCards(cnt.map(a=>a.need),def,take.length);
+    const lim=def.hand+take.length;
+    if(sol&&sol.cards<=lim&&(!bestHand||sol.cards<bestHand.cards||(sol.cards===bestHand.cards&&req<bestHand.req)))
+      bestHand={cards:sol.cards,req,take,blocked,cnt,picks:sol.picks,evs:sol.evs};
+  }
+  return {req:bestReq?bestReq.req:Infinity, minPlan:bestReq, hand:bestHand, lethal:!bestHand};
+}
+
+// 手牌未知：對每個「2000反擊張數 a」算最少要幾張1000反擊，列出擋得住的最低組合
+function min1k(needs,a){
+  const memo=new Map();
+  function f(i,left){
+    if(i===needs.length) return 0;
+    const key=i*100+left; if(memo.has(key)) return memo.get(key);
+    let best=Infinity;
+    for(let t=0;t<=left;t++){
+      const rem=needs[i]-t*2000, o=rem>0?Math.ceil(rem/1000):0;
+      best=Math.min(best,o+f(i+1,left-t));
+      if(rem<=0) break;
+    }
+    memo.set(key,best); return best;
+  }
+  return f(0,a);
+}
+function evVectors(evs,dDon){
+  const out=[], u=new Array(evs.length).fill(0);
+  (function rec(j,cost){
+    if(j===evs.length){out.push(u.slice());return;}
+    for(let e=0;e<=evs[j].n;e++){ if(cost+e*evs[j].cost>dDon) break; u[j]=e; rec(j+1,cost+e*evs[j].cost); }
+    u[j]=0;
+  })(0,0);
+  return out;
+}
+// 手上有 a 張2000、事件 u 時，最少還要幾張1000
+function min1kEv(needs,a,u,evs,don){
+  const memo=new Map(), better=(x,y)=>!y||x.b+x.dd<y.b+y.dd||(x.b+x.dd===y.b+y.dd&&x.b<y.b);
+  function f(i,left,rem,d){
+    if(i===needs.length) return {b:0,dd:0};
+    const key=i+'|'+left+'|'+rem.join(',')+'|'+d; if(memo.has(key)) return memo.get(key);
+    let best=null; const use=new Array(rem.length).fill(0);
+    (function pick(j,pw,c){
+      if(j===rem.length){
+        const dd=use.reduce((s,n,q)=>s+(evs[q].life?n*(evs[q].disc||0):0),0);
+        for(let t=0;t<=left;t++){
+          const r=needs[i]-pw-t*2000, o=r>0?Math.ceil(r/1000):0;
+          const sub=f(i+1,left-t,rem.map((x,q)=>x-use[q]),d-c);
+          const cand={b:o+sub.b,dd:dd+sub.dd};
+          if(better(cand,best)) best=cand;
+          if(r<=0) break;
+        }
+        return;
+      }
+      for(let e=0;e<=rem[j];e++){ if(c+e*evs[j].cost>d) break; use[j]=e; pick(j+1,pw+e*evs[j].val,c+e*evs[j].cost); if(pw+e*evs[j].val>=needs[i]) break; }
+      use[j]=0;
+    })(0,0,0);
+    memo.set(key,best); return best;
+  }
+  return f(0,a,u,don);
+}
+function frontier(atks,def,evs){
+  const live=atks.map((a,i)=>({...a,i,need:needOf(a.p,def.power)})).filter(a=>a.need>0);
+  const k=live.length, seen=new Set(), plans=[];
+  for(let m=0;m<(1<<k);m++){
+    const take=[],rest=[];
+    live.forEach((a,j)=>((m>>j)&1?take:rest).push(a));
+    if(!survives(take.map(a=>a.da?2:1),def.life)) continue;
+    const blockable=rest.filter(a=>!a.ub).sort((x,y)=>y.need-x.need);
+    const blocked=new Set(blockable.slice(0,def.blockers).map(a=>a.i));
+    const needs=rest.filter(a=>!blocked.has(a.i)).map(a=>a.need).sort((x,y)=>y-x);
+    const key=take.length+'|'+needs.join(','); if(seen.has(key)) continue; seen.add(key);
+    plans.push({hits:take.length,needs});
+  }
+  if(!plans.length) return [];
+  // 依吃血數分組：吃越多血，手上可用的牌越多（生命卡進手牌）
+  const byHits=new Map(); plans.forEach(p=>{if(!byHits.has(p.hits))byHits.set(p.hits,[]);byHits.get(p.hits).push(p);});
+  const maxA=Math.max(...plans.map(p=>p.needs.reduce((s,n)=>s+Math.ceil(n/2000),0)));
+  const vecs=evs.length?evVectors(evs,def.dDon):[[]];
+  let out=[];
+  for(const u of vecs) for(const [h,group] of byHits){
+    let prev=Infinity; const lg=lifeGain(def,h);
+    for(let a=0;a<=maxA;a++){
+      let b=Infinity, dd=0;
+      for(const p of group){
+        const r=min1kEv(p.needs,a+lg.k2,u.concat(lg.evs.map(()=>1)),evs.concat(lg.evs),def.dDon);
+        const v=Math.max(0,r.b-lg.k1);
+        if(v+r.dd<b+dd){b=v;dd=r.dd;} if(b+dd===0) break;
+      }
+      if(b+dd<prev){out.push({a,b,u,hits:h,dd});prev=b+dd;}
+      if(b+dd===0) break;
+    }
+  }
+  const le=(y,x)=>y.a<=x.a&&y.b<=x.b&&y.dd<=x.dd&&y.u.every((v,q)=>v<=x.u[q])&&y.hits>=x.hits;
+  out=out.filter(x=>!out.some(y=>y!==x&&le(y,x)&&!le(x,y)));
+  const seenK=new Set(); out=out.filter(x=>{const k=x.a+'|'+x.b+'|'+x.dd+'|'+x.u.join(',')+'|'+x.hits;if(seenK.has(k))return false;seenK.add(k);return true;});
+  out.forEach(x=>{
+    x.cnt=x.a+x.b+x.u.reduce((s,v)=>s+v,0);
+    x.n=x.cnt+x.u.reduce((s,v,q)=>s+v*(evs[q].disc||0),0)+x.dd;
+    const hand=def.hand, lg=lifeGain(def,x.hits);
+    const fodder=x.hits-lg.cred;                         // 沒當反擊用、可以拿來棄的生命卡
+    const cntCap=hand+(S.lifeV===-1?lg.unk:0);           // 未知的生命卡也可能是反擊
+    x.over = x.cnt>cntCap || x.n>hand+fodder;
+  });
+  out.sort((x,y)=>(x.over-y.over)||x.n-y.n||x.hits-y.hits||x.u.reduce((s,v)=>s+v,0)-y.u.reduce((s,v)=>s+v,0)||x.a-y.a);
+  return out;
+}
+function applyFront(r,atks,def,evs){
+  const fr=frontier(atks,def,evs);
+  const ok=fr.filter(x=>!x.over);
+  const minCards=!fr.length?0:ok.length?Math.min(...ok.map(x=>x.n)):Math.min(...fr.map(x=>x.n));
+  r.front=fr; r.frontEvs=evs; r.minCards=minCards; r.lethal=fr.length>0&&!ok.length;
+  r.hand=r.lethal?null:{cards:minCards,...r.minPlan,picks:null};
+}
+
+function cmpR(a,b){return (b.lethal-a.lethal)||((b.minCards??(b.hand?b.hand.cards:99))-(a.minCards??(a.hand?a.hand.cards:99)))||(b.req-a.req);}
+function analyze(attackers,don,def){
+  const m=attackers.length; if(!m) return null;
+  const alloc=new Array(m).fill(0), results=[];
+  (function rec(i,left){
+    if(i===m-1){alloc[i]=left; run(); return;}
+    for(let x=0;x<=left;x++){alloc[i]=x;rec(i+1,left-x);}
+  })(0,don);
+  function run(){
+    const atks=attackers.map((a,i)=>({name:a.name,p:a.p+alloc[i]*1000,da:a.da,ub:a.ub,don:alloc[i]}));
+    const r=defend(atks,def);
+    if(def.unknown) applyFront(r,atks,def,[]);
+    results.push({alloc:alloc.slice(),atks,...r});
+  }
+  const cmp=cmpR;
+  results.sort(cmp);
+  // 對手可能有反擊事件：只對前幾名重算（事件只會讓防守更容易）
+  const evs=def.unknown?def.evs.filter(v=>v.n>0&&v.val>0):[];
+  if(evs.length){
+    const top=results.slice(0,30);
+    top.forEach(r=>applyFront(r,r.atks,def,evs));
+    top.sort(cmp);
+    results.splice(0,30,...top);
+  }
+  return results;
+}
+
+function sideAttackers(d,label){
+  const list=[{name:'領導者',p:d.leader,da:d.lda,ub:d.lub}];
+  d.chars.forEach((c,i)=>{if(c.atk) list.push({name:label+'角色'+(i+1),p:c.p,da:c.da,ub:c.ub});});
+  return list;
+}
+function sideDef(d,blockers,dDon){
+  return {power:d.leader,life:d.life,blockers,c2:d.c2,c1:d.c1,evs:d.evs,dDon,unknown:!!d.unknown,hand:d.hand,lk:(d.lk||[]).slice(0,d.life),lke:(d.lke||[]).slice(0,d.life)};
+}
+
+/* ---------- 輸出 ---------- */
+const fmt=n=>n.toLocaleString('en-US');
+function actPill(a,r,plan){
+  if(!plan) return '';
+  if(a.p<r.defPower) return '<span class="pill p-fail">力量不足</span>';
+  if(plan.take.some(x=>x.i===a.idx)) return `<span class="pill p-take">吃下 −${a.da?2:1}血</span>`;
+  if(plan.blocked.has(a.idx)) return '<span class="pill p-blk">阻擋者擋</span>';
+  const j=plan.cnt.findIndex(x=>x.i===a.idx);
+  if(j>=0){
+    if(plan.picks){const p=plan.picks[j];const parts=[];if(p.t)parts.push(p.t+'×2000');if(p.o)parts.push(p.o+'×1000');p.ev.forEach((n,q)=>{if(n)parts.push(evLabel(plan.evs[q])+'×'+n);});return `<span class="pill p-cnt">反擊 ${parts.join('+')}</span>`;}
+    return `<span class="pill p-cnt">反擊 +${fmt(plan.cnt[j].need)}</span>`;
+  }
+  return '';
+}
+function attackTable(best,defPower){
+  const plan=best.hand||best.minPlan;
+  const r={defPower};
+  return `<div class="tbl"><table><thead><tr><th>攻擊者</th><th>貼DON!!</th><th style="text-align:right">攻擊力</th><th style="text-align:right">需反擊</th><th>對方最佳應對</th></tr></thead><tbody>
+  ${best.atks.map((a,idx)=>{a.idx=idx;const need=needOf(a.p,defPower);return `<tr><td>${a.name}${a.da?' (雙擊)':''}${a.ub?' (不可擋)':''}</td><td class="num">${a.don}</td><td class="num">${fmt(a.p)}</td><td class="num">${need?fmt(need):'—'}</td><td>${actPill(a,r,plan)}</td></tr>`}).join('')}
+  </tbody></table></div>`;
+}
+function altTable(results){
+  const rows=results.slice(1,5);
+  if(!rows.length) return '';
+  return `<div class="grp-t">其他較佳配法</div><div class="tbl"><table><thead><tr><th>DON!! 分配</th><th style="text-align:right">最小反擊需求</th><th style="text-align:right">對方至少耗牌</th></tr></thead><tbody>
+  ${rows.map(r=>`<tr class="alt"><td>${r.atks.map(a=>a.name.replace('角色','#')+'+'+a.don).join('　')}</td><td class="num">${fmt(r.req)}</td><td class="num">${r.lethal?'擋不住':r.hand.cards+' 張'}</td></tr>`).join('')}
+  </tbody></table></div>`;
+}
+
+function evLabel(v){return (v.name?v.name+' ':'')+`${v.cost}C/${v.val}${v.disc?'/棄'+v.disc:''}`;}
+function comboText(x,evs){
+  const parts=[];
+  (x.u||[]).forEach((n,q)=>{if(n)parts.push(evLabel(evs[q])+'×'+n);});
+  if(x.a)parts.push('2000×'+x.a); if(x.b)parts.push('1000×'+x.b); if(x.dd)parts.push('任意手牌×'+x.dd+'（棄）');
+  return parts.join(' + ')||'不用反擊';
+}
+function comboHTML(fr,hand,evs){
+  if(!fr.length) return '<p class="hint">不需要任何反擊就擋得住。</p>';
+  const shown=fr.slice(0,10);
+  return `<div class="grp-t">對手手上要有以下任一組合才擋得住</div><div class="combos">${shown.map(x=>{
+    const notes=[x.n+' 張'];
+    if(x.hits) notes.push(`吃${x.hits}血，生命卡已算入`);
+    if(x.dd) notes.push(`生命事件要棄${x.dd}張`);
+    if(x.over) notes.push('超過手牌');
+    return `<span class="combo${x.over?' over':''}">${comboText(x,evs)}<small>${notes.join('，')}</small></span>`;}).join('')}</div>
+  ${fr.length>shown.length?`<p class="hint">另有 ${fr.length-shown.length} 種張數更多的組合未列出。</p>`:''}
+  <p class="hint">比這些組合少就擋不住。${S.lifeV===-1?'未知的生命卡算成內容未知的手牌；已知的照 HP 設定。':S.lifeV?'已把吃下的生命卡算成反擊。':'吃下的生命卡當作沒有反擊，只能拿來棄。'}</p>`;
+}
+function handHint(side){
+  const d=S[side], used=d.c2+d.c1+d.evs.reduce((a,v)=>a+v.n,0), el=document.getElementById(side+'-handhint');
+  if(!el) return;
+  if(d.unknown){el.className='hint';el.textContent=`只用手牌張數判斷；結果會列出對手要有哪些反擊組合才擋得住；有填可能的反擊事件也會算進去。`;return;}
+  if(used>d.hand){el.className='hint w';el.textContent=`反擊牌合計 ${used} 張，超過手牌 ${d.hand} 張，請修正。`;}
+  else {el.className='hint';el.textContent=`手牌 ${d.hand} 張：反擊牌 ${used} 張，其餘 ${d.hand-used} 張當作沒有反擊值。`;}
+}
+
+function compute(){
+  handHint('me');handHint('op');
+  const res=document.getElementById('res');
+  const meAtk=sideAttackers(S.me,'我方');
+  const opBlockers=S.op.chars.filter(c=>c.blk).length;
+  const atkDef=sideDef(S.op,opBlockers,S.op.defDon);
+  const rushPlans=(list,don,room,fn)=>{
+    const rs=list.filter(v=>v.n>0), u=new Array(rs.length).fill(0);
+    (function rec(j,cost,cnt){
+      if(j===rs.length){
+        const extra=[]; u.forEach((n,q)=>{for(let k=0;k<n;k++) extra.push({name:'速攻 '+(rs[q].name?rs[q].name+' ':'')+rs[q].cost+'C/'+rs[q].p,p:rs[q].p,da:rs[q].da,ub:rs[q].ub});});
+        fn(extra,don-cost,cnt,u.map((n,q)=>n?`${rs[q].name?rs[q].name+' ':''}${rs[q].cost}C/${rs[q].p}×${n}`:'').filter(Boolean).join('、'));
+        return;
+      }
+      for(let e=0;e<=rs[j].n;e++){ if(cost+e*rs[j].cost>don||cnt+e>room) break; u[j]=e; rec(j+1,cost+e*rs[j].cost,cnt+e); }
+      u[j]=0;
+    })(0,0,0);
+    return rs.length;
+  };
+  let A=null,best=null,myRushTxt='',myBase=null,myRushCnt=0;
+  const hasMyRush=rushPlans(S.me.rush,S.me.don,Math.max(0,5-S.me.chars.length),(extra,don,cnt,txt)=>{
+    const R=analyze(meAtk.concat(extra),don,atkDef);
+    if(!cnt) myBase=R[0];
+    if(!best||cmpR(R[0],best)<0){best=R[0];A=R;myRushTxt=txt;myRushCnt=cnt;}
+  });
+
+  const opAtk=sideAttackers(S.op,'對手');
+  const myBlockers=S.me.chars.filter(c=>c.blk&&!c.atk).length;
+  const survDef=sideDef(S.me,myBlockers,S.me.defDon);
+  survDef.hand=Math.max(0,S.me.hand-myRushCnt); // 下了速攻，手牌少幾張
+  // 對手下回合：試每種「下幾隻速攻」的組合，剩下的 DON!! 再分配
+  let worst=null, base=null, rushTxt='';
+  const rush=S.op.rush.filter(v=>v.n>0);
+  rushPlans(S.op.rush,S.op.nextDon,Math.max(0,5-S.op.chars.length),(extra,don,cnt,txt)=>{
+    const r=analyze(opAtk.concat(extra),don,survDef)[0];
+    if(!cnt) base=r;
+    if(!worst||cmpR(r,worst)<0){worst=r;rushTxt=txt;}
+  });
+
+  const myLethal=best.lethal, iDie=worst.lethal, unk=S.op.unknown;
+  const easiest=unk&&best.front.length?best.front[0]:null;
+  const ezTxt=easiest?comboText(easiest,best.frontEvs):'';
+  let cls,title,body;
+  if(unk&&myLethal){cls='b-good';title='ALL IN：對手手牌張數不夠，怎麼擋都擋不住';
+    body=`最省的擋法也要 ${best.minCards} 張牌，對手只有 ${S.op.hand} 張手牌${S.lifeV===-1||S.lifeV===0?'（含吃血拿到的生命卡也不夠）':''}，觸發不計。`;}
+  else if(unk&&iDie){cls='b-bad';title='下回合你大概守不住：只能 ALL IN 賭對手沒有反擊';
+    body=`用最大壓力配法，對手至少要有 ${ezTxt} 這類組合（${best.minCards} 張反擊牌）才擋得住。`;}
+  else if(unk){cls='b-warn';title='看對手手牌：有下列組合就擋得住';
+    body=`最省的擋法是 ${ezTxt||'不用反擊'}（${best.minCards} 張），對手手牌 ${S.op.hand} 張。你下回合守得住，不一定要 ALL IN。`;}
+  else if(myLethal){cls='b-good';title='ALL IN：照估計的手牌，對手擋不住';
+    body=`對手至少要 ${fmt(best.req)} 反擊值才活得下來。手牌估計若偏低，這個結論就不成立，看下面的「最小反擊需求」判斷風險。`;}
+  else if(iDie){cls='b-bad';title='下回合你大概守不住：只能 ALL IN 賭對手反擊不夠';
+    body=`對手下回合最強配法要你出 ${fmt(worst.req)} 反擊值，你估計的手牌擋不下。這回合就算打不死，也應該用最大壓力配法，逼對手把反擊用光。`;}
+  else {cls='b-warn';title='延伸對局：這回合打不死，下回合守得住';
+    body=`對手只要 ${best.hand.cards} 張牌就能擋下你這回合；你下回合需要 ${worst.hand?worst.hand.cards:'—'} 張牌防守。可以考慮保留資源或打角色。`;}
+
+  lastBest=best;lastWorst=worst;renderBoard();
+
+  res.innerHTML=`
+  <div class="banner ${cls}"><div class="k">局面判斷</div><div class="v">${title}</div><p>${body}</p></div>
+  <div class="cards2">
+    <section class="box"><h3 style="color:var(--me)">這回合：最大壓力配法</h3>
+      <dl class="kv">
+        <dt>最小反擊需求</dt><dd>${fmt(best.req)}（約 ${Math.ceil(best.req/2000)} 張2000反擊）</dd>
+        ${unk?'':`<dt>依估計手牌</dt><dd style="color:${myLethal?'var(--good)':'var(--ink)'}">${myLethal?'擋不住 → 斬殺':'擋得住，耗 '+best.hand.cards+' 張'}</dd>`}
+        <dt>對手阻擋者</dt><dd>${opBlockers} 隻</dd>
+        ${hasMyRush?`<dt>你下速攻</dt><dd>${myRushTxt||'不下比較強'}</dd>`:''}
+      </dl>
+      ${myRushTxt&&myBase?`<p class="hint">不下速攻時，最小反擊需求是 ${fmt(myBase.req)}；下了變成 ${fmt(best.req)}。</p>`:''}
+      ${unk?comboHTML(best.front,S.op.hand,best.frontEvs):''}
+      ${attackTable(best,S.op.leader)}
+      ${altTable(A)}
+    </section>
+    <section class="box"><h3 style="color:var(--op)">下回合：對手最強配法打你</h3>
+      <dl class="kv">
+        <dt>你的最小反擊需求</dt><dd>${fmt(worst.req)}（約 ${Math.ceil(worst.req/2000)} 張2000反擊）</dd>
+        <dt>依你的手牌</dt><dd style="color:${iDie?'var(--bad)':'var(--good)'}">${iDie?'守不住':'守得住，耗 '+worst.hand.cards+' 張'}</dd>
+        <dt>你能用的阻擋者</dt><dd>${myBlockers} 隻（這回合有攻擊的不算）</dd>
+        ${rush.length?`<dt>對手下速攻</dt><dd>${rushTxt||'不下比較強'}</dd>`:''}
+      </dl>
+      ${rushTxt&&base?`<p class="hint">對手不下速攻時，你需要 ${fmt(base.req)} 反擊值${base.lethal?'（也守不住）':'，'+(base.hand?'耗 '+base.hand.cards+' 張':'')}；下了速攻變成 ${fmt(worst.req)}。</p>`:''}
+      ${attackTable(worst,S.me.leader)}
+    </section>
+  </div>`;
+}
+
+renderBoard(); renderRush(); compute();
+</script>
+
+</body>
+</html>
