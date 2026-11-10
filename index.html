@@ -70,6 +70,12 @@ button{font-family:var(--f-body);cursor:pointer;color:inherit}
 .rm{position:absolute;top:-9px;right:-7px;width:24px;height:24px;border-radius:50%;border:1px solid var(--line);background:var(--panel);color:var(--muted);font-size:14px;line-height:1;padding:0;display:flex;align-items:center;justify-content:center;z-index:2}
 .rm:hover{color:var(--bad);border-color:var(--bad)}
 .card .cl{margin-top:6px}
+.card.rested{background:repeating-linear-gradient(135deg,var(--cardface) 0 7px,var(--cs) 7px 14px)}
+.kot td{white-space:normal;vertical-align:top;min-width:120px;line-height:1.5}
+.kot td small{color:var(--muted)}
+.kot tr.kobase td{background:var(--bg)}
+.kohead{margin:0;font-weight:700}
+.kogood{color:var(--good)} .kobad{color:var(--bad)}
 .slot{aspect-ratio:63/88;border:1.5px dashed var(--mat-line);border-radius:6px;background:transparent;color:var(--muted);font-size:22px;min-width:0}
 .slot.empty{cursor:default}
 
@@ -176,7 +182,7 @@ details ul{margin:8px 0 0;padding-left:20px;color:var(--muted)}
 <body>
 <div class="wrap">
   <header>
-    <h1>航海王TCG 配DON!!計算器 <span class="ver" id="ver">v13</span> <span class="ex" id="exTag">範例盤面</span></h1>
+    <h1>航海王TCG 配DON!!計算器 <span class="ver" id="ver">v14</span> <span class="ex" id="exTag">範例盤面</span></h1>
     <p class="sub">點角色改力量和能力，點領導者改手牌，HP 和 DON!! 在領導者兩側。紫色標籤是算出來的DON!!配法。</p>
   </header>
 
@@ -188,12 +194,15 @@ details ul{margin:8px 0 0;padding-left:20px;color:var(--muted)}
 
   <div class="rush" id="rushPanels" aria-label="速攻角色設定"></div>
 
+  <p class="hint" id="calcState" aria-live="polite"></p>
   <div class="res" id="res"></div>
 
   <details>
     <summary>計算假設（看結果前請讀）</summary>
     <ul>
       <li>【速攻】：角色登場的回合也可以攻擊（官方綜合規則 10-1-1-1）。在牌桌下方的速攻卡片設定雙方的速攻角色。</li>
+      <li>解怪：只能攻擊橫置的角色。對手兩種應對都會算：讓角色死，或丟牌保它（只算全保或全不保）。推薦取對你比較差的那個結果。KO 時的效果、被擋時阻擋者會不會死，都沒有算。</li>
+      <li>DON!!：這回合貼出去或拿去下速攻的 DON!!，對手回合不能付反擊事件；需要留的時候結果區會提示。</li>
       <li>點領導者可設定領導者力量和手牌；HP、DON!! 在領導者兩側。</li>
       <li>反擊事件格式：費用C / +力量 / 張數 / 棄幾張手牌。「棄手牌的刀」要額外丟掉手牌，丟掉的牌也算進張數。</li>
       <li>卡片上「攻」= 會攻擊、「擋」= 阻擋者、「雙」= 雙重攻擊、劃紅線的「擋」= 不可被阻擋；虛線框 = 不攻擊。圖示灰色 = 沒有這個能力，點一下切換。</li>
@@ -210,18 +219,398 @@ details ul{margin:8px 0 0;padding-left:20px;color:var(--muted)}
 <div class="scrim" id="scrim" hidden></div>
 <div class="sheet" id="sheet" role="dialog" aria-modal="true" aria-labelledby="sh-title" hidden><div class="sheet-in" id="sheet-in"></div></div>
 
+<script type="text/plain" id="engine-src">
+/* ===== 計算引擎：純函式，在背景執行緒跑；不碰畫面 ===== */
+function needOf(p,dp){return p>=dp?Math.floor((p-dp)/1000)*1000+1000:0;}
+function survives(dmgs,life){ if(!dmgs.length) return true; const sum=dmgs.reduce((a,b)=>a+b,0), mn=Math.min(...dmgs); return sum-mn<life; }
+function evLabel(v){return (v.name?v.name+' ':'')+`${v.cost}C/${v.val}${v.disc?'/棄'+v.disc:''}`;}
+
+// 吃 h 下會拿到最上面 h 張生命卡：已知的照設定，未知的算成內容未知的手牌
+function lifeGain(def,h){
+  const g={k2:0,k1:0,unk:0,cred:0,evs:[]};
+  for(let q=0;q<h;q++){
+    const v=(def.lk&&def.lk[q]!==undefined&&def.lk[q]!==null)?def.lk[q]:-1;
+    if(v===2000) g.k2++; else if(v===1000) g.k1++; else if(v===-1) g.unk++;
+    else if(v==='e'){const e=(def.lke&&def.lke[q])||{val:2000,cost:1,disc:0};g.evs.push({name:'生命事件',n:1,val:e.val,cost:e.cost,disc:e.disc||0,life:true,free:true});}
+  }
+  g.cred=g.k2+g.k1+g.evs.length; // 當成反擊用的生命卡
+  return g;
+}
+
+// 已知手牌：用最少張數擋下所有需求；回傳 {cards, picks} 或 null
+function solveCards(needs,def,hits){
+  const lg=lifeGain(def,hits), n2=def.c2+lg.k2, n1=def.c1+lg.k1;
+  const evs=def.evs.filter(v=>v.n>0&&v.val>0).concat(lg.evs), K=evs.length;
+  const memo=new Map();
+  function f(i,a2,a1,ae,d){
+    if(i===needs.length) return {cards:0,picks:[]};
+    const key=i+'|'+a2+'|'+a1+'|'+ae.join(',')+'|'+d; if(memo.has(key)) return memo.get(key);
+    const c=needs[i]; let best=null; const use=new Array(K).fill(0);
+    (function pick(j,power,cost,cnt){
+      if(j===K){
+        for(let t=0;t<=a2;t++){
+          const rem=c-power-t*2000, o=rem>0?Math.ceil(rem/1000):0;
+          if(o<=a1){
+            const sub=f(i+1,a2-t,a1-o,ae.map((x,q)=>x-use[q]),d-cost);
+            if(sub){const tot=sub.cards+cnt+t+o; if(!best||tot<best.cards) best={cards:tot,picks:[{ev:use.slice(),t,o}].concat(sub.picks)};}
+          }
+          if(rem<=0) break;
+        }
+        return;
+      }
+      for(let e=0;e<=ae[j];e++){
+        if(cost+e*evs[j].cost>d) break;
+        use[j]=e; pick(j+1,power+e*evs[j].val,cost+e*evs[j].cost,cnt+e*(1+(evs[j].disc||0)));
+        if(power+e*evs[j].val>=c) break;
+      }
+      use[j]=0;
+    })(0,0,0,0);
+    memo.set(key,best); return best;
+  }
+  const out=f(0,n2,n1,evs.map(v=>v.n),def.dDon);
+  if(out) out.evs=evs;
+  return out;
+}
+
+// 已知手牌的防守：每一下吃／擋／反擊，找最少耗牌
+function defend(atks,def){
+  const live=atks.map((a,i)=>({...a,i,need:needOf(a.p,def.power)})).filter(a=>a.need>0);
+  const k=live.length;
+  let bestReq=null, bestHand=null;
+  for(let m=0;m<(1<<k);m++){
+    const take=[],rest=[];
+    live.forEach((a,j)=>((m>>j)&1?take:rest).push(a));
+    if(!survives(take.map(a=>a.da?2:1),def.life)) continue;
+    const blockable=rest.filter(a=>!a.ub).sort((x,y)=>y.need-x.need);
+    const blocked=new Set(blockable.slice(0,def.blockers).map(a=>a.i));
+    const cnt=rest.filter(a=>!blocked.has(a.i)).sort((x,y)=>y.need-x.need);
+    const req=cnt.reduce((s,a)=>s+a.need,0);
+    if(!bestReq||req<bestReq.req) bestReq={req,take,blocked,cnt};
+    const sol=solveCards(cnt.map(a=>a.need),def,take.length);
+    const lim=def.hand+take.length;
+    if(sol&&sol.cards<=lim&&(!bestHand||sol.cards<bestHand.cards||(sol.cards===bestHand.cards&&req<bestHand.req)))
+      bestHand={cards:sol.cards,req,take,blocked,cnt,picks:sol.picks,evs:sol.evs};
+  }
+  return {req:bestReq?bestReq.req:Infinity, minPlan:bestReq, hand:bestHand, lethal:!bestHand};
+}
+
+function evVectors(evs,dDon){
+  const out=[], u=new Array(evs.length).fill(0);
+  (function rec(j,cost){
+    if(j===evs.length){out.push(u.slice());return;}
+    for(let e=0;e<=evs[j].n;e++){ if(cost+e*evs[j].cost>dDon) break; u[j]=e; rec(j+1,cost+e*evs[j].cost); }
+    u[j]=0;
+  })(0,0);
+  return out;
+}
+// 手上有 a 張2000、事件 u 時，最少還要幾張1000（dd＝已知／生命事件要棄的牌）
+function min1kEv(needs,a,u,evs,don){
+  const memo=new Map(), better=(x,y)=>!y||x.b+x.dd<y.b+y.dd||(x.b+x.dd===y.b+y.dd&&x.b<y.b);
+  function f(i,left,rem,d){
+    if(i===needs.length) return {b:0,dd:0};
+    const key=i+'|'+left+'|'+rem.join(',')+'|'+d; if(memo.has(key)) return memo.get(key);
+    let best=null; const use=new Array(rem.length).fill(0);
+    (function pick(j,pw,c){
+      if(j===rem.length){
+        const dd=use.reduce((s,n,q)=>s+(evs[q].free?n*(evs[q].disc||0):0),0);
+        for(let t=0;t<=left;t++){
+          const r=needs[i]-pw-t*2000, o=r>0?Math.ceil(r/1000):0;
+          const sub=f(i+1,left-t,rem.map((x,q)=>x-use[q]),d-c);
+          const cand={b:o+sub.b,dd:dd+sub.dd};
+          if(better(cand,best)) best=cand;
+          if(r<=0) break;
+        }
+        return;
+      }
+      for(let e=0;e<=rem[j];e++){ if(c+e*evs[j].cost>d) break; use[j]=e; pick(j+1,pw+e*evs[j].val,c+e*evs[j].cost); if(pw+e*evs[j].val>=needs[i]) break; }
+      use[j]=0;
+    })(0,0,0);
+    memo.set(key,best); return best;
+  }
+  return f(0,a,u,don);
+}
+
+// 對手手牌部分未知：列出「除了已知的牌，未知的牌還要有」的最低組合
+// 攻擊可帶 vs（打角色時的防守力）與 must（一定要擋，不能讓它過；用在「保角色」）
+function frontier(atks,def,evs){
+  const live=atks.map((a,i)=>({...a,i,need:needOf(a.p,a.vs!=null?a.vs:def.power)})).filter(a=>a.need>0);
+  const k=live.length, seen=new Set(), plans=[];
+  for(let m=0;m<(1<<k);m++){
+    const take=[],rest=[];
+    live.forEach((a,j)=>((m>>j)&1?take:rest).push(a));
+    if(take.some(a=>a.must)) continue;
+    if(!survives(take.map(a=>a.da?2:1),def.life)) continue;
+    const blockable=rest.filter(a=>!a.ub).sort((x,y)=>y.need-x.need);
+    const blocked=new Set(blockable.slice(0,def.blockers).map(a=>a.i));
+    const cnt=rest.filter(a=>!blocked.has(a.i)).sort((x,y)=>y.need-x.need);
+    const needs=cnt.map(a=>a.need);
+    const key=take.length+'|'+needs.join(','); if(seen.has(key)) continue; seen.add(key);
+    plans.push({hits:take.length,needs,take,blocked,cnt});
+  }
+  if(!plans.length) return [];
+  const byHits=new Map(); plans.forEach(p=>{if(!byHits.has(p.hits))byHits.set(p.hits,[]);byHits.get(p.hits).push(p);});
+  const maxA=Math.max(...plans.map(p=>p.needs.reduce((s,n)=>s+Math.ceil(n/2000),0)));
+  const vecs=evs.length?evVectors(evs,def.dDon):[[]];
+  let out=[];
+  const kE=def.evs.filter(v=>v.n>0&&v.val>0).map(v=>({...v,free:true}));   // 已知在手上的事件
+  for(const u of vecs) for(const [h,group] of byHits){
+    let prev=Infinity; const lg=lifeGain(def,h);
+    const fE=kE.concat(lg.evs), fU=kE.map(v=>v.n).concat(lg.evs.map(()=>1));
+    for(let a=0;a<=maxA;a++){
+      let b=Infinity, dd=0, pb=null;
+      for(const p of group){
+        const r=min1kEv(p.needs,a+lg.k2+def.c2,u.concat(fU),evs.concat(fE),def.dDon);
+        const v=Math.max(0,r.b-lg.k1-def.c1);
+        if(v+r.dd<b+dd){b=v;dd=r.dd;pb=p;} if(b+dd===0) break;
+      }
+      if(b+dd<prev){out.push({a,b,u,hits:h,dd,pl:pb});prev=b+dd;}
+      if(b+dd===0) break;
+    }
+  }
+  const le=(y,x)=>y.a<=x.a&&y.b<=x.b&&y.dd<=x.dd&&y.u.every((v,q)=>v<=x.u[q])&&y.hits>=x.hits;
+  out=out.filter(x=>!out.some(y=>y!==x&&le(y,x)&&!le(x,y)));
+  const seenK=new Set(); out=out.filter(x=>{const k=x.a+'|'+x.b+'|'+x.dd+'|'+x.u.join(',')+'|'+x.hits;if(seenK.has(k))return false;seenK.add(k);return true;});
+  const known=def.c2+def.c1+kE.reduce((s,v)=>s+v.n,0);
+  out.forEach(x=>{
+    x.cnt=x.a+x.b+x.u.reduce((s,v)=>s+v,0);
+    x.n=x.cnt+x.u.reduce((s,v,q)=>s+v*(evs[q].disc||0),0)+x.dd;
+    const lg=lifeGain(def,x.hits);
+    const unknownCards=Math.max(0,def.hand-known);       // 手上未知的牌
+    const fodder=x.hits-lg.cred;                         // 沒當反擊用、可以拿來棄的生命卡
+    x.over = x.cnt>unknownCards+lg.unk || x.n>def.hand+fodder;
+  });
+  out.sort((x,y)=>(x.over-y.over)||x.n-y.n||x.hits-y.hits||x.u.reduce((s,v)=>s+v,0)-y.u.reduce((s,v)=>s+v,0)||x.a-y.a);
+  return out;
+}
+function applyFront(r,atks,def,evs){
+  const fr=frontier(atks,def,evs);
+  const ok=fr.filter(x=>!x.over);
+  const pickFrom=ok.length?ok:fr;
+  const top=pickFrom.length?pickFrom.reduce((x,y)=>y.n<x.n?y:x):null;
+  r.front=fr; r.frontEvs=evs; r.minCards=top?top.n:0; r.minHits=top?top.hits:0;
+  r.lethal=fr.length>0&&!ok.length;
+  // 表格顯示的應對，跟「張數最少」的組合用同一個防守方案
+  r.hand=r.lethal?null:(top&&top.pl?{cards:top.n,req:top.pl.cnt.reduce((s,a)=>s+a.need,0),take:top.pl.take,blocked:top.pl.blocked,cnt:top.pl.cnt,picks:null}:{cards:0,...(r.minPlan||{take:[],blocked:new Set(),cnt:[]}),picks:null});
+}
+
+function cmpR(a,b){return (b.lethal-a.lethal)||((b.minCards??(b.hand?b.hand.cards:99))-(a.minCards??(a.hand?a.hand.cards:99)))||(b.req-a.req);}
+function emptyResult(){return {alloc:[],atks:[],req:0,minPlan:{req:0,take:[],blocked:new Set(),cnt:[]},hand:{cards:0,req:0,take:[],blocked:new Set(),cnt:[],picks:null},lethal:false,front:[],frontEvs:[],minCards:0,minHits:0};}
+// 窮舉 DON!! 分配；回傳依好壞排序的結果
+function analyze(attackers,don,def){
+  const m=attackers.length; if(!m) return [emptyResult()];
+  const alloc=new Array(m).fill(0), results=[];
+  (function rec(i,left){
+    if(i===m-1){alloc[i]=left; run(); return;}
+    for(let x=0;x<=left;x++){alloc[i]=x;rec(i+1,left-x);}
+  })(0,Math.max(0,don));
+  function run(){
+    const atks=attackers.map((a,i)=>({name:a.name,p:a.p+alloc[i]*1000,da:a.da,ub:a.ub,don:alloc[i]}));
+    const r=defend(atks,def);
+    if(def.unknown) applyFront(r,atks,def,[]);
+    results.push({alloc:alloc.slice(),atks,...r});
+  }
+  results.sort(cmpR);
+  // 對手可能有反擊事件：只對前幾名重算（事件只會讓防守更容易）
+  const evs=def.unknown?(def.pevs||[]).filter(v=>v.n>0&&v.val>0):[];
+  if(evs.length){
+    const top=results.slice(0,30);
+    top.forEach(r=>applyFront(r,r.atks,def,evs));
+    top.sort(cmpR);
+    results.splice(0,30,...top);
+  }
+  return results;
+}
+
+function sideAttackers(d,label,dead){
+  const list=[{name:'領導者',p:d.leader,da:d.lda,ub:d.lub,ci:-1}];
+  d.chars.forEach((c,i)=>{if(c.atk&&!(dead&&dead.includes(i))) list.push({name:label+'角色'+(i+1),p:c.p,da:c.da,ub:c.ub,ci:i});});
+  return list;
+}
+function sideDef(d,blockers,dDon){
+  return {power:d.leader,life:d.life,blockers,c2:d.c2,c1:d.c1,evs:d.evs,dDon,unknown:!!d.unknown,hand:d.hand,pevs:d.pevs||[],lk:(d.lk||[]).slice(0,d.life),lke:(d.lke||[]).slice(0,d.life)};
+}
+// 試每種「下幾隻速攻」：費用從 DON!! 扣，剩下的再分配
+function rushPlans(list,don,room,fn){
+  const rs=list.filter(v=>v.n>0), u=new Array(rs.length).fill(0);
+  (function rec(j,cost,cnt){
+    if(j===rs.length){
+      const extra=[]; u.forEach((n,q)=>{for(let k=0;k<n;k++) extra.push({name:'速攻 '+(rs[q].name?rs[q].name+' ':'')+rs[q].cost+'C/'+rs[q].p,p:rs[q].p,da:rs[q].da,ub:rs[q].ub,ci:null});});
+      fn(extra,don-cost,cnt,u.map((n,q)=>n?`${rs[q].name?rs[q].name+' ':''}${rs[q].cost}C/${rs[q].p}×${n}`:'').filter(Boolean).join('、'),cost);
+      return;
+    }
+    for(let e=0;e<=rs[j].n;e++){ if(cost+e*rs[j].cost>don||cnt+e>room) break; u[j]=e; rec(j+1,cost+e*rs[j].cost,cnt+e); }
+    u[j]=0;
+  })(0,0,0);
+  return rs.length;
+}
+
+// 對手下回合打你：dead＝這回合被你解掉的角色；dDon＝你留下來付反擊事件的 DON!!
+function survival(S,dead,myBlockers,myHand,dDon){
+  const survDef=sideDef(S.me,myBlockers,dDon); survDef.hand=myHand;
+  const opAtk=sideAttackers(S.op,'對手',dead);
+  const alive=S.op.chars.length-dead.length;
+  let worst=null,base=null,rushTxt='';
+  const nr=rushPlans(S.op.rush,S.op.nextDon,Math.max(0,5-alive),(extra,don,cnt,txt)=>{
+    const r=analyze(opAtk.concat(extra),don,survDef)[0];
+    if(!cnt) base=r;
+    if(!worst||cmpR(r,worst)<0){worst=r;rushTxt=txt;}
+  });
+  return {worst,base,rushTxt,opHasRush:nr>0};
+}
+
+// 第一階段：全打臉的最佳配法＋下回合存活
+function calcBase(S){
+  const meAtk=sideAttackers(S.me,'我方');
+  const opBlockers=S.op.chars.filter(c=>c.blk&&!c.rest).length;
+  const atkDef=sideDef(S.op,opBlockers,S.op.defDon);
+  let A=null,best=null,myRushTxt='',myBase=null,myRushCnt=0,myExtra=[],myRushCost=0;
+  const hasMyRush=rushPlans(S.me.rush,S.me.don,Math.max(0,5-S.me.chars.length),(extra,don,cnt,txt,cost)=>{
+    const R=analyze(meAtk.concat(extra),don,atkDef);
+    if(!cnt) myBase=R[0];
+    if(!best||cmpR(R[0],best)<0){best=R[0];A=R.slice(0,5);myRushTxt=txt;myRushCnt=cnt;myExtra=extra;myRushCost=cost;}
+  });
+  const myBlockers=S.me.chars.filter(c=>c.blk&&!c.atk).length;
+  const myHand=Math.max(0,S.me.hand-myRushCnt);
+  // DON!! 全部貼出去或拿去下速攻，對手回合就沒有 DON!! 付反擊事件
+  const sv=survival(S,[],myBlockers,myHand,0);
+  let reserve=null;
+  const myEvCost=S.me.evs.filter(v=>v.n>0&&v.val>0).reduce((s,v)=>s+v.cost*v.n,0);
+  const donAvail=S.me.don-myRushCost;
+  if(sv.worst.lethal&&myEvCost>0){
+    for(let r=1;r<=Math.min(myEvCost,donAvail);r++){
+      const s2=survival(S,[],myBlockers,myHand,r);
+      if(!s2.worst.lethal){ reserve={r,worst:s2.worst,best:analyze(meAtk.concat(myExtra),donAvail-r,atkDef)[0]}; break; }
+    }
+  }
+  return {best,A,myRushTxt,myBase,hasMyRush:hasMyRush>0,myRushCnt,myExtra,myRushCost,opBlockers,myBlockers,myHand,atkDef,
+          worst:sv.worst,base:sv.base,rushTxt:sv.rushTxt,opHasRush:sv.opHasRush,reserve};
+}
+
+// 第二階段：解怪搜尋。每個攻擊者可以打領導者或一隻橫置角色；對手可以「保」或「不保」
+function koSearch(S,B,budget,progress){
+  const t0=Date.now();
+  const targets=S.op.chars.map((c,i)=>({ci:i,p:c.p})).filter(t=>S.op.chars[t.ci].rest);
+  if(!targets.length) return {none:true};
+  const atks=sideAttackers(S.me,'我方').concat(B.myExtra);
+  const don=Math.max(0,S.me.don-B.myRushCost);
+  const def=B.atkDef;
+  const pevs=(def.pevs||[]).filter(v=>v.n>0&&v.val>0);
+  const opHand=S.op.hand, opPlay=S.op.play==null?2:S.op.play;
+  const faceMemo=new Map(), survMemo=new Map();
+  const faceBest=(idxs,D)=>{const k=idxs.join(',')+'|'+D; if(!faceMemo.has(k)) faceMemo.set(k,analyze(idxs.map(i=>atks[i]),D,def)[0]); return faceMemo.get(k);};
+  const survFor=dead=>{const k=dead.slice().sort().join(','); if(!survMemo.has(k)) survMemo.set(k,survival(S,dead,B.myBlockers,B.myHand,0).worst); return survMemo.get(k);};
+  const branch=(cards,hits,sv)=>({cards,hits,oppNext:Math.max(0,opHand-cards+hits+1-opPlay),
+    iDie:!!sv.lethal,myNeed:sv.hand?sv.hand.cards:null,margin:sv.lethal?-1:B.myHand-(sv.hand?sv.hand.cards:0),myReq:sv.req});
+  const all=atks.map((_,i)=>i);
+  const fb0=faceBest(all,don);
+  const baseline={assign:[],face:fb0.atks,lethal:fb0.lethal,ns:branch(fb0.minCards,fb0.minHits,survFor([])),s:null,front:fb0.front};
+
+  // 列出所有指派：每隻橫置角色由最多一個攻擊者負責；相同的攻擊者只試一次
+  const sig=a=>a.p+'|'+!!a.da+'|'+!!a.ub;
+  const assigns=[];
+  (function rec(t,used,cur,dsum){
+    if(t===targets.length){ if(cur.length) assigns.push({list:cur.slice(),dsum}); return; }
+    rec(t+1,used,cur,dsum);
+    for(let i=0;i<atks.length;i++){
+      if(used.has(i)) continue;
+      if(atks.some((b,j)=>j<i&&!used.has(j)&&sig(b)===sig(atks[i]))) continue;
+      const d=Math.max(0,Math.ceil((targets[t].p-atks[i].p)/1000));
+      if(dsum+d>don) continue;
+      used.add(i); cur.push({ai:i,ti:t,dmin:d}); rec(t+1,used,cur,dsum+d); cur.pop(); used.delete(i);
+    }
+  })(0,new Set(),[],0);
+  assigns.sort((x,y)=>x.list.length-y.list.length||x.dsum-y.dsum);
+
+  // 每個打角色的攻擊：剛好打得過，或多貼 1～2 張讓對手保它更貴
+  const jobs=[];
+  for(const as of assigns){
+    (function rec(j,extra,used){
+      if(j===as.list.length){jobs.push({as,extra:extra.slice()});return;}
+      for(let e=0;e<=2;e++){ if(used+as.list[j].dmin+e>don) break; extra.push(e); rec(j+1,extra,used+as.list[j].dmin+e); extra.pop(); }
+    })(0,[],0);
+  }
+  const options=[]; let done=0, lastPost=Date.now(), timedOut=false;
+  for(const job of jobs){
+    if(Date.now()-t0>budget){timedOut=true;break;}
+    const {as,extra}=job;
+    const assigned=new Set(as.list.map(x=>x.ai));
+    const faceIdx=all.filter(i=>!assigned.has(i));
+    const used=as.list.reduce((s,x,j)=>s+x.dmin+extra[j],0);
+    const fb=faceBest(faceIdx,don-used);
+    const charAtks=as.list.map((x,j)=>{const a=atks[x.ai],t=targets[x.ti],d=x.dmin+extra[j];
+      return {name:a.name,p:a.p+d*1000,da:false,ub:a.ub,vs:t.p,must:true,don:d,ci:t.ci,tp:t.p};});
+    const dead=as.list.map(x=>targets[x.ti].ci);
+    const ns=branch(fb.minCards,fb.minHits,survFor(dead));
+    // 保：角色那幾下一定要擋或反擊
+    const fr=frontier(fb.atks.concat(charAtks),def,pevs);
+    const ok=fr.filter(x=>!x.over);
+    const sTop=ok.length?ok.reduce((x,y)=>y.n<x.n?y:x):null;
+    const s=sTop?branch(sTop.n,sTop.hits,survFor([])):null;
+    options.push({assign:charAtks,face:fb.atks,lethal:fb.lethal,ns,s});
+    done++;
+    if(progress&&Date.now()-lastPost>250){lastPost=Date.now();progress(Math.round(done/jobs.length*100));}
+  }
+  // 穩健排序：對手兩種選擇裡，取對你比較差的那個來比
+  const key=m=>[m.iDie?0:1, m.iDie?0:m.margin, -m.oppNext];
+  const cmpKey=(x,y)=>{for(let i=0;i<x.length;i++){if(x[i]!==y[i])return x[i]-y[i];}return 0;};
+  const robust=o=>{const ks=[key(o.ns)]; if(o.s) ks.push(key(o.s)); return ks.reduce((a,b)=>cmpKey(a,b)<=0?a:b);};
+  options.forEach(o=>o.rk=robust(o));
+  baseline.rk=robust(baseline);
+  options.sort((a,b)=>(b.lethal-a.lethal)||cmpKey(b.rk,a.rk)||(a.assign.length-b.assign.length));
+  const seen=new Set(), top=[];
+  for(const o of options){const k=o.assign.map(c=>c.name+'>'+c.ci).sort().join(';'); if(seen.has(k)) continue; seen.add(k); top.push(o); if(top.length>=5) break;}
+  // 只有「斬殺」或「讓你下回合活下來／更穩」才算比全打臉好；兩邊都會死時，解怪沒有意義
+  const better=!!top.length&&!baseline.lethal&&(top[0].lethal||(top[0].rk[0]===1&&cmpKey(top[0].rk,baseline.rk)>0));
+  return {baseline,options:top,better,done,total:jobs.length,timedOut,ms:Date.now()-t0};
+}
+
+function calcAll(S,budget,post){
+  const B=calcBase(S);
+  post({stage:'base',B});
+  const K=koSearch(S,B,budget,pct=>post({stage:'progress',pct}));
+  post({stage:'ko',K});
+}
+
+</script>
 <script>
-const APP_VERSION='v13';
+const APP_VERSION='v14';
 const S = {
   me:{ leader:5000, lda:false, lub:false, life:2, hand:4, c2:1, c1:2, evs:[], rush:[], don:10, defDon:0, lk:[], lke:[],
        chars:[{p:5000,atk:true,blk:false,da:false,ub:false},{p:7000,atk:true,blk:false,da:false,ub:false},{p:7000,atk:true,blk:false,da:false,ub:false},{p:3000,atk:false,blk:true,da:false,ub:false}] },
-  op:{ leader:5000, lda:false, lub:false, life:1, hand:5, c2:0, c1:0, unknown:true, evs:[], pevs:[], rush:[], defDon:0, nextDon:10, lk:[], lke:[],
-       chars:[{p:5000,atk:true,blk:false,da:false,ub:false},{p:7000,atk:true,blk:false,da:false,ub:false},{p:7000,atk:true,blk:false,da:false,ub:false},{p:3000,atk:false,blk:true,da:false,ub:false}] },
+  op:{ leader:5000, lda:false, lub:false, life:1, hand:5, c2:0, c1:0, unknown:true, evs:[], pevs:[], rush:[], defDon:0, nextDon:10, play:2, lk:[], lke:[],
+       chars:[{p:5000,atk:true,blk:false,da:false,ub:false},{p:7000,atk:true,blk:false,da:false,ub:false,rest:true},{p:7000,atk:true,blk:false,da:false,ub:false},{p:3000,atk:false,blk:true,da:false,ub:false}] },
   lifeV:-1
 };
 let touched=false, sheet=null, opener=null, lastBest=null, lastWorst=null;
 const $=id=>document.getElementById(id);
 const fmtN=n=>n.toLocaleString('en-US');
+/* 計算引擎：同一份程式碼，背景執行緒跑；不支援時退回主執行緒 */
+const ENGINE_SRC=document.getElementById('engine-src').textContent;
+const ENG=new Function(ENGINE_SRC+'\nreturn {calcAll,needOf,evLabel};')();
+const needOf=ENG.needOf, evLabel=ENG.evLabel;
+let worker=null, busy=false, jobId=0, lastSnap=null, workerOK=true;
+function makeWorker(){
+  if(!workerOK) return null;
+  try{
+    const url=URL.createObjectURL(new Blob([ENGINE_SRC+'\nself.onmessage=function(e){var d=e.data;calcAll(d.S,d.budget,function(m){m.id=d.id;self.postMessage(m);});};'],{type:'text/javascript'}));
+    const w=new Worker(url);
+    w.onmessage=e=>onCalc(e.data);
+    w.onerror=()=>{workerOK=false;try{w.terminate();}catch(_){} worker=null;busy=false;runSync(jobId,lastSnap);};
+    return w;
+  }catch(e){workerOK=false;return null;}
+}
+function runSync(id,snap){
+  setTimeout(()=>{ if(id!==jobId) return;
+    try{ENG.calcAll(snap,800,m=>{m.id=id;onCalc(m);});}
+    catch(err){const r=$('res'); if(r) r.innerHTML='<p class="hint" style="color:var(--bad)">計算出錯：'+String(err&&err.message||err)+'</p>';}
+  },0);
+}
+function onCalc(m){
+  if(m.id!==jobId) return;
+  if(m.stage==='base') renderBase(m.B);
+  else if(m.stage==='progress') renderKOProgress(m.pct);
+  else if(m.stage==='ko'){busy=false;renderKO(m.K);}
+}
 
 /* ---------- 牌桌 ---------- */
 function donFor(side,i){
@@ -232,12 +621,12 @@ function donFor(side,i){
 function cardTile(side,i,asSpan){
   const d=S[side], L=i<0;
   const c=L?{p:d.leader,atk:true,blk:false,da:d.lda,ub:d.lub}:d.chars[i];
-  const b=[]; if(!L&&c.atk)b.push('攻'); if(c.blk)b.push('擋'); if(c.da)b.push('雙'); if(c.ub)b.push('!擋');
+  const b=[]; if(!L&&c.rest)b.push('橫'); if(!L&&c.atk)b.push('攻'); if(c.blk)b.push('擋'); if(c.da)b.push('雙'); if(c.ub)b.push('!擋');
   const don=donFor(side,i);
   const name=L?'領導者':'角色'+(i+1);
   const inner=`<span class="cl">${name}</span><span class="pw">${c.p}</span>
     <span class="bd">${b.map(x=>x[0]==='!'?`<i class="ubb">${x.slice(1)}</i>`:`<i>${x}</i>`).join('')}</span>${don?`<span class="don">+${don}</span>`:''}`;
-  const cls=`card${L?' leader':''}${!L&&!c.atk?' rest':''}`;
+  const cls=`card${L?' leader':''}${!L&&!c.atk?' rest':''}${!L&&c.rest?' rested':''}`;
   if(asSpan) return `<span class="${cls}">${inner}</span>`;
   return `<button class="${cls}" id="${side}-card${i}" data-open="card" data-s="${side}" data-i="${i}"
     aria-label="${side==='me'?'我方':'對手'}${name}，力量${c.p}${b.length?'，'+b.join('、'):''}${don?'，配DON!! '+don:''}">${inner}</button>`;
@@ -259,7 +648,7 @@ function renderZone(side){
       aria-label="${me?'我方':'對手'}領導者，力量${d.leader}，手牌${d.hand}張${don?'，配DON!! '+don:''}，點擊設定領導者與手牌">
       ${cardTile(side,-1,true)}<span class="handcap">手牌 <b>${d.hand}</b> ${handSub}</span></button>`;
   const hp=(pos)=>`<button class="stat hp ${pos}" id="${side}-st-life" data-open="life" data-s="${side}"><span class="l">HP</span><span class="v">${d.life}</span><span class="s">${(()=>{const k=(d.lk||[]).slice(0,d.life).filter(v=>v==='e'||v>0);return k.length?'已知 '+k.map(v=>v==='e'?'事件':v/1000+'k').join(' '):'生命';})()}</span></button>`;
-  const dn=(pos)=>`<button class="stat dn ${pos}" id="${side}-st-don" data-open="don" data-s="${side}"><span class="l">${me?'可貼DON!!':'剩餘DON!!'}</span><span class="v">${me?d.don:d.defDon}</span><span class="s">${me?'守備 '+d.defDon:'下回合 '+d.nextDon}</span></button>`;
+  const dn=(pos)=>`<button class="stat dn ${pos}" id="${side}-st-don" data-open="don" data-s="${side}"><span class="l">${me?'可貼DON!!':'剩餘DON!!'}</span><span class="v">${me?d.don:d.defDon}</span><span class="s">${me?'這回合':'下回合 '+d.nextDon}</span></button>`;
   $('zone-'+side).innerHTML=me
     ?`<div class="chars">${slots.join('')}</div><div class="top">${dn('sl')+lead+hp('sr')}</div>`
     :`<div class="top">${hp('sl')+lead+dn('sr')}</div><div class="chars">${slots.join('')}</div>`;
@@ -336,8 +725,8 @@ function renderSheet(){
     title=`${who}角色${i+1}`; const p=`${side}.chars.${i}`;
     body=stepper(`${p}.p`,'力量',1000,0,20000)+
       `<div class="st"><span class="stl">能力</span><span class="icos">${ico(`${p}.da`,'da')}${ico(`${p}.ub`,'ub')}</span></div>
-      <div class="sws">${sw(`${p}.atk`,me?'這回合攻擊':'下回合攻擊')}${sw(`${p}.blk`,'阻擋者')}</div>
-      <p class="note">${me?'這回合有攻擊的角色會橫置，算下回合防守時不能阻擋。':'阻擋者會用來擋你這回合的攻擊。'}</p>
+      <div class="sws">${sw(`${p}.atk`,me?'這回合攻擊':'下回合攻擊')}${sw(`${p}.blk`,'阻擋者')}${me?'':sw(`${p}.rest`,'橫置中')}</div>
+      <p class="note">${me?'這回合有攻擊的角色會橫置，算下回合防守時不能阻擋。':'橫置中的角色這回合不能阻擋，但可以被你攻擊（解怪）。對手下回合開始會重置，照樣能攻擊。'}</p>
       <button class="danger" id="delchar" data-delchar="${i}">移除這張角色</button>`;
   }else if(type==='life'){
     title=who+'HP';
@@ -353,8 +742,8 @@ function renderSheet(){
       '<p class="note">「未知」的生命卡算成一張內容未知的手牌。「事件」填費用 / 力量 / 要棄幾張手牌，拿到後可以當反擊事件用；費用受 DON!! 限制，棄的手牌算進張數。</p>':'');
   }else if(type==='don'){
     title=who+'DON!!';
-    body=me?stepper('me.don','這回合可貼DON!!',1,0,10)+stepper('me.defDon','對手回合可用DON!!（付反擊事件）',1,0,10)
-           :stepper('op.defDon','現在剩餘DON!!（付反擊事件）',1,0,10)+stepper('op.nextDon','下回合可貼DON!!',1,0,10);
+    body=me?stepper('me.don','這回合可用DON!!',1,0,10)+'<p class="note">貼出去或拿去下速攻的 DON!!，在對手回合不能付反擊事件。如果需要留 DON!! 給反擊事件，結果區會提示。</p>'
+           :stepper('op.defDon','現在剩餘DON!!（付反擊事件）',1,0,10)+stepper('op.nextDon','下回合可貼DON!!',1,0,10)+stepper('op.play','下回合預估打出幾張牌',1,0,10)+'<p class="note">「打出幾張」只用來估計對手進入你下一次攻擊時還剩幾張手牌。</p>';
   }
   const keep=document.activeElement&&document.activeElement.id;
   $('sheet-in').innerHTML=`<div class="sh-head"><h2 id="sh-title">${title}</h2><button class="done" id="sh-done" data-close="1">完成</button></div>${body}`;
@@ -399,224 +788,6 @@ document.addEventListener('keydown',e=>{if(e.key==='Escape'&&sheet)closeSheet();
 function markTouched(){if(!touched){touched=true;const x=$('exTag');if(x)x.hidden=true;}}
 let timer; function schedule(){clearTimeout(timer);timer=setTimeout(compute,120);}
 
-/* ---------- 引擎 ---------- */
-function needOf(p,dp){return p>=dp?Math.floor((p-dp)/1000)*1000+1000:0;}
-function survives(dmgs,life){ if(!dmgs.length) return true; const sum=dmgs.reduce((a,b)=>a+b,0), mn=Math.min(...dmgs); return sum-mn<life; }
-
-// 吃 h 下會拿到最上面 h 張生命卡：已知的照設定，未知的照「生命卡當作」選項
-function lifeGain(def,h){
-  const g={k2:0,k1:0,unk:0,cred:0,evs:[]};
-  for(let q=0;q<h;q++){
-    const v=(def.lk&&def.lk[q]!==undefined)?def.lk[q]:-1;
-    if(v===2000) g.k2++; else if(v===1000) g.k1++; else if(v===-1) g.unk++;
-    else if(v==='e'){const e=(def.lke&&def.lke[q])||{val:2000,cost:1,disc:0};g.evs.push({name:'生命事件',n:1,val:e.val,cost:e.cost,disc:e.disc||0,life:true,free:true});}
-  }
-  if(S.lifeV===2000) g.k2+=g.unk; if(S.lifeV===1000) g.k1+=g.unk;
-  g.cred=g.k2+g.k1+g.evs.length; // 當成反擊用的生命卡
-  return g;
-}
-// 用手牌最少張數擋下所有需求；回傳 {cards, picks} 或 null
-function solveCards(needs,def,hits){
-  const lg=lifeGain(def,hits), n2=def.c2+lg.k2, n1=def.c1+lg.k1; // lg.evs：拿到的已知生命事件
-  const evs=def.evs.filter(v=>v.n>0&&v.val>0).concat(lg.evs), K=evs.length;
-  const memo=new Map();
-  function f(i,a2,a1,ae,d){
-    if(i===needs.length) return {cards:0,picks:[]};
-    const key=i+'|'+a2+'|'+a1+'|'+ae.join(',')+'|'+d; if(memo.has(key)) return memo.get(key);
-    const c=needs[i]; let best=null; const use=new Array(K).fill(0);
-    // 逐種事件決定這一下用幾張，再補 2000/1000 反擊
-    (function pick(j,power,cost,cnt){
-      if(j===K){
-        for(let t=0;t<=a2;t++){
-          const rem=c-power-t*2000, o=rem>0?Math.ceil(rem/1000):0;
-          if(o<=a1){
-            const sub=f(i+1,a2-t,a1-o,ae.map((x,q)=>x-use[q]),d-cost);
-            if(sub){const tot=sub.cards+cnt+t+o; if(!best||tot<best.cards) best={cards:tot,picks:[{ev:use.slice(),t,o}].concat(sub.picks)};}
-          }
-          if(rem<=0) break;
-        }
-        return;
-      }
-      for(let e=0;e<=ae[j];e++){
-        if(cost+e*evs[j].cost>d) break;
-        use[j]=e; pick(j+1,power+e*evs[j].val,cost+e*evs[j].cost,cnt+e*(1+(evs[j].disc||0)));
-        if(power+e*evs[j].val>=c) break;
-      }
-      use[j]=0;
-    })(0,0,0,0);
-    memo.set(key,best); return best;
-  }
-  const out=f(0,n2,n1,evs.map(v=>v.n),def.dDon);
-  if(out) out.evs=evs;
-  return out;
-}
-
-function defend(atks,def){
-  const live=atks.map((a,i)=>({...a,i,need:needOf(a.p,def.power)})).filter(a=>a.need>0);
-  const k=live.length;
-  let bestReq=null, bestHand=null;
-  for(let m=0;m<(1<<k);m++){
-    const take=[],rest=[];
-    live.forEach((a,j)=>((m>>j)&1?take:rest).push(a));
-    if(!survives(take.map(a=>a.da?2:1),def.life)) continue;
-    const blockable=rest.filter(a=>!a.ub).sort((x,y)=>y.need-x.need);
-    const blocked=new Set(blockable.slice(0,def.blockers).map(a=>a.i));
-    const cnt=rest.filter(a=>!blocked.has(a.i)).sort((x,y)=>y.need-x.need);
-    const req=cnt.reduce((s,a)=>s+a.need,0);
-    if(!bestReq||req<bestReq.req) bestReq={req,take,blocked,cnt};
-    const sol=solveCards(cnt.map(a=>a.need),def,take.length);
-    const lim=def.hand+take.length;
-    if(sol&&sol.cards<=lim&&(!bestHand||sol.cards<bestHand.cards||(sol.cards===bestHand.cards&&req<bestHand.req)))
-      bestHand={cards:sol.cards,req,take,blocked,cnt,picks:sol.picks,evs:sol.evs};
-  }
-  return {req:bestReq?bestReq.req:Infinity, minPlan:bestReq, hand:bestHand, lethal:!bestHand};
-}
-
-// 手牌未知：對每個「2000反擊張數 a」算最少要幾張1000反擊，列出擋得住的最低組合
-function min1k(needs,a){
-  const memo=new Map();
-  function f(i,left){
-    if(i===needs.length) return 0;
-    const key=i*100+left; if(memo.has(key)) return memo.get(key);
-    let best=Infinity;
-    for(let t=0;t<=left;t++){
-      const rem=needs[i]-t*2000, o=rem>0?Math.ceil(rem/1000):0;
-      best=Math.min(best,o+f(i+1,left-t));
-      if(rem<=0) break;
-    }
-    memo.set(key,best); return best;
-  }
-  return f(0,a);
-}
-function evVectors(evs,dDon){
-  const out=[], u=new Array(evs.length).fill(0);
-  (function rec(j,cost){
-    if(j===evs.length){out.push(u.slice());return;}
-    for(let e=0;e<=evs[j].n;e++){ if(cost+e*evs[j].cost>dDon) break; u[j]=e; rec(j+1,cost+e*evs[j].cost); }
-    u[j]=0;
-  })(0,0);
-  return out;
-}
-// 手上有 a 張2000、事件 u 時，最少還要幾張1000
-function min1kEv(needs,a,u,evs,don){
-  const memo=new Map(), better=(x,y)=>!y||x.b+x.dd<y.b+y.dd||(x.b+x.dd===y.b+y.dd&&x.b<y.b);
-  function f(i,left,rem,d){
-    if(i===needs.length) return {b:0,dd:0};
-    const key=i+'|'+left+'|'+rem.join(',')+'|'+d; if(memo.has(key)) return memo.get(key);
-    let best=null; const use=new Array(rem.length).fill(0);
-    (function pick(j,pw,c){
-      if(j===rem.length){
-        const dd=use.reduce((s,n,q)=>s+(evs[q].free?n*(evs[q].disc||0):0),0);
-        for(let t=0;t<=left;t++){
-          const r=needs[i]-pw-t*2000, o=r>0?Math.ceil(r/1000):0;
-          const sub=f(i+1,left-t,rem.map((x,q)=>x-use[q]),d-c);
-          const cand={b:o+sub.b,dd:dd+sub.dd};
-          if(better(cand,best)) best=cand;
-          if(r<=0) break;
-        }
-        return;
-      }
-      for(let e=0;e<=rem[j];e++){ if(c+e*evs[j].cost>d) break; use[j]=e; pick(j+1,pw+e*evs[j].val,c+e*evs[j].cost); if(pw+e*evs[j].val>=needs[i]) break; }
-      use[j]=0;
-    })(0,0,0);
-    memo.set(key,best); return best;
-  }
-  return f(0,a,u,don);
-}
-function frontier(atks,def,evs){
-  const live=atks.map((a,i)=>({...a,i,need:needOf(a.p,def.power)})).filter(a=>a.need>0);
-  const k=live.length, seen=new Set(), plans=[];
-  for(let m=0;m<(1<<k);m++){
-    const take=[],rest=[];
-    live.forEach((a,j)=>((m>>j)&1?take:rest).push(a));
-    if(!survives(take.map(a=>a.da?2:1),def.life)) continue;
-    const blockable=rest.filter(a=>!a.ub).sort((x,y)=>y.need-x.need);
-    const blocked=new Set(blockable.slice(0,def.blockers).map(a=>a.i));
-    const needs=rest.filter(a=>!blocked.has(a.i)).map(a=>a.need).sort((x,y)=>y-x);
-    const key=take.length+'|'+needs.join(','); if(seen.has(key)) continue; seen.add(key);
-    plans.push({hits:take.length,needs});
-  }
-  if(!plans.length) return [];
-  // 依吃血數分組：吃越多血，手上可用的牌越多（生命卡進手牌）
-  const byHits=new Map(); plans.forEach(p=>{if(!byHits.has(p.hits))byHits.set(p.hits,[]);byHits.get(p.hits).push(p);});
-  const maxA=Math.max(...plans.map(p=>p.needs.reduce((s,n)=>s+Math.ceil(n/2000),0)));
-  const vecs=evs.length?evVectors(evs,def.dDon):[[]];
-  let out=[];
-  const kE=def.evs.filter(v=>v.n>0&&v.val>0).map(v=>({...v,free:true}));   // 已知在手上的事件
-  for(const u of vecs) for(const [h,group] of byHits){
-    let prev=Infinity; const lg=lifeGain(def,h);
-    const fE=kE.concat(lg.evs), fU=kE.map(v=>v.n).concat(lg.evs.map(()=>1));
-    for(let a=0;a<=maxA;a++){
-      let b=Infinity, dd=0;
-      for(const p of group){
-        const r=min1kEv(p.needs,a+lg.k2+def.c2,u.concat(fU),evs.concat(fE),def.dDon);
-        const v=Math.max(0,r.b-lg.k1-def.c1);
-        if(v+r.dd<b+dd){b=v;dd=r.dd;} if(b+dd===0) break;
-      }
-      if(b+dd<prev){out.push({a,b,u,hits:h,dd});prev=b+dd;}
-      if(b+dd===0) break;
-    }
-  }
-  const le=(y,x)=>y.a<=x.a&&y.b<=x.b&&y.dd<=x.dd&&y.u.every((v,q)=>v<=x.u[q])&&y.hits>=x.hits;
-  out=out.filter(x=>!out.some(y=>y!==x&&le(y,x)&&!le(x,y)));
-  const seenK=new Set(); out=out.filter(x=>{const k=x.a+'|'+x.b+'|'+x.dd+'|'+x.u.join(',')+'|'+x.hits;if(seenK.has(k))return false;seenK.add(k);return true;});
-  out.forEach(x=>{
-    x.cnt=x.a+x.b+x.u.reduce((s,v)=>s+v,0);
-    x.n=x.cnt+x.u.reduce((s,v,q)=>s+v*(evs[q].disc||0),0)+x.dd;
-    const hand=def.hand, lg=lifeGain(def,x.hits);
-    const known=def.c2+def.c1+kE.reduce((s,v)=>s+v.n,0);
-    const unknownCards=Math.max(0,hand-known);            // 手上未知的牌
-    const fodder=x.hits-lg.cred;                         // 沒當反擊用、可以拿來棄的生命卡
-    const cntCap=unknownCards+lg.unk;                    // 未知的手牌＋未知的生命卡
-    x.over = x.cnt>cntCap || x.n>hand+fodder;
-  });
-  out.sort((x,y)=>(x.over-y.over)||x.n-y.n||x.hits-y.hits||x.u.reduce((s,v)=>s+v,0)-y.u.reduce((s,v)=>s+v,0)||x.a-y.a);
-  return out;
-}
-function applyFront(r,atks,def,evs){
-  const fr=frontier(atks,def,evs);
-  const ok=fr.filter(x=>!x.over);
-  const minCards=!fr.length?0:ok.length?Math.min(...ok.map(x=>x.n)):Math.min(...fr.map(x=>x.n));
-  r.front=fr; r.frontEvs=evs; r.minCards=minCards; r.lethal=fr.length>0&&!ok.length;
-  r.hand=r.lethal?null:{cards:minCards,...r.minPlan,picks:null};
-}
-
-function cmpR(a,b){return (b.lethal-a.lethal)||((b.minCards??(b.hand?b.hand.cards:99))-(a.minCards??(a.hand?a.hand.cards:99)))||(b.req-a.req);}
-function analyze(attackers,don,def){
-  const m=attackers.length; if(!m) return null;
-  const alloc=new Array(m).fill(0), results=[];
-  (function rec(i,left){
-    if(i===m-1){alloc[i]=left; run(); return;}
-    for(let x=0;x<=left;x++){alloc[i]=x;rec(i+1,left-x);}
-  })(0,don);
-  function run(){
-    const atks=attackers.map((a,i)=>({name:a.name,p:a.p+alloc[i]*1000,da:a.da,ub:a.ub,don:alloc[i]}));
-    const r=defend(atks,def);
-    if(def.unknown) applyFront(r,atks,def,[]);
-    results.push({alloc:alloc.slice(),atks,...r});
-  }
-  const cmp=cmpR;
-  results.sort(cmp);
-  // 對手可能有反擊事件：只對前幾名重算（事件只會讓防守更容易）
-  const evs=def.unknown?(def.pevs||[]).filter(v=>v.n>0&&v.val>0):[];
-  if(evs.length){
-    const top=results.slice(0,30);
-    top.forEach(r=>applyFront(r,r.atks,def,evs));
-    top.sort(cmp);
-    results.splice(0,30,...top);
-  }
-  return results;
-}
-
-function sideAttackers(d,label){
-  const list=[{name:'領導者',p:d.leader,da:d.lda,ub:d.lub}];
-  d.chars.forEach((c,i)=>{if(c.atk) list.push({name:label+'角色'+(i+1),p:c.p,da:c.da,ub:c.ub});});
-  return list;
-}
-function sideDef(d,blockers,dDon){
-  return {power:d.leader,life:d.life,blockers,c2:d.c2,c1:d.c1,evs:d.evs,dDon,unknown:!!d.unknown,hand:d.hand,pevs:d.pevs||[],lk:(d.lk||[]).slice(0,d.life),lke:(d.lke||[]).slice(0,d.life)};
-}
-
 /* ---------- 輸出 ---------- */
 const fmt=n=>n.toLocaleString('en-US');
 function actPill(a,r,plan){
@@ -646,7 +817,6 @@ function altTable(results){
   </tbody></table></div>`;
 }
 
-function evLabel(v){return (v.name?v.name+' ':'')+`${v.cost}C/${v.val}${v.disc?'/棄'+v.disc:''}`;}
 function comboText(x,evs){
   const parts=[];
   (x.u||[]).forEach((n,q)=>{if(n)parts.push(evLabel(evs[q])+'×'+n);});
@@ -676,76 +846,40 @@ function handHint(side){
 
 function compute(){
   handHint('me');handHint('op');
-  const res=document.getElementById('res');
-  const meAtk=sideAttackers(S.me,'我方');
-  const opBlockers=S.op.chars.filter(c=>c.blk).length;
-  const atkDef=sideDef(S.op,opBlockers,S.op.defDon);
-  const rushPlans=(list,don,room,fn)=>{
-    const rs=list.filter(v=>v.n>0), u=new Array(rs.length).fill(0);
-    (function rec(j,cost,cnt){
-      if(j===rs.length){
-        const extra=[]; u.forEach((n,q)=>{for(let k=0;k<n;k++) extra.push({name:'速攻 '+(rs[q].name?rs[q].name+' ':'')+rs[q].cost+'C/'+rs[q].p,p:rs[q].p,da:rs[q].da,ub:rs[q].ub});});
-        fn(extra,don-cost,cnt,u.map((n,q)=>n?`${rs[q].name?rs[q].name+' ':''}${rs[q].cost}C/${rs[q].p}×${n}`:'').filter(Boolean).join('、'));
-        return;
-      }
-      for(let e=0;e<=rs[j].n;e++){ if(cost+e*rs[j].cost>don||cnt+e>room) break; u[j]=e; rec(j+1,cost+e*rs[j].cost,cnt+e); }
-      u[j]=0;
-    })(0,0,0);
-    return rs.length;
-  };
-  let A=null,best=null,myRushTxt='',myBase=null,myRushCnt=0;
-  const hasMyRush=rushPlans(S.me.rush,S.me.don,Math.max(0,5-S.me.chars.length),(extra,don,cnt,txt)=>{
-    const R=analyze(meAtk.concat(extra),don,atkDef);
-    if(!cnt) myBase=R[0];
-    if(!best||cmpR(R[0],best)<0){best=R[0];A=R;myRushTxt=txt;myRushCnt=cnt;}
-  });
-
-  const opAtk=sideAttackers(S.op,'對手');
-  const myBlockers=S.me.chars.filter(c=>c.blk&&!c.atk).length;
-  const survDef=sideDef(S.me,myBlockers,S.me.defDon);
-  survDef.hand=Math.max(0,S.me.hand-myRushCnt); // 下了速攻，手牌少幾張
-  // 對手下回合：試每種「下幾隻速攻」的組合，剩下的 DON!! 再分配
-  let worst=null, base=null, rushTxt='';
-  const rush=S.op.rush.filter(v=>v.n>0);
-  rushPlans(S.op.rush,S.op.nextDon,Math.max(0,5-S.op.chars.length),(extra,don,cnt,txt)=>{
-    const r=analyze(opAtk.concat(extra),don,survDef)[0];
-    if(!cnt) base=r;
-    if(!worst||cmpR(r,worst)<0){worst=r;rushTxt=txt;}
-  });
-
-  const myLethal=best.lethal, iDie=worst.lethal, unk=S.op.unknown;
+  const id=++jobId; lastSnap=JSON.parse(JSON.stringify(S));
+  const st=$('calcState'); if(st) st.textContent='計算中…';
+  if(!worker||busy){ if(worker&&busy){try{worker.terminate();}catch(_){} } worker=makeWorker(); }
+  if(worker){ busy=true; worker.postMessage({id,S:lastSnap,budget:3000}); }
+  else runSync(id,lastSnap);
+}
+const short=n=>n.replace(/^我方/,'').replace(/^對手/,'');
+function renderBase(B){
+  const res=$('res');
+  const {best,A,worst,base}=B;
+  const myLethal=best.lethal, iDie=worst.lethal;
   const opKn=S.op.c2+S.op.c1+S.op.evs.reduce((a,v)=>a+v.n,0), opUnk=Math.max(0,S.op.hand-opKn);
   const knPre=opKn?`除了已知的 ${opKn} 張，`:'';
-  const easiest=unk&&best.front.length?best.front[0]:null;
+  const easiest=best.front&&best.front.length?best.front[0]:null;
   const ezTxt=easiest?comboText(easiest,best.frontEvs):'';
   let cls,title,body;
-  if(unk&&myLethal){cls='b-good';title='ALL IN：對手的牌不夠，怎麼擋都擋不住';
+  if(myLethal){cls='b-good';title='ALL IN：對手的牌不夠，怎麼擋都擋不住';
     body=`${knPre}最省的擋法還要 ${best.minCards} 張未知牌，對手只有 ${opUnk} 張未知牌（含吃血拿到的生命卡也不夠），觸發不計。`;}
-  else if(unk&&iDie){cls='b-bad';title='下回合你大概守不住：只能 ALL IN 賭對手沒有反擊';
-    body=`用最大壓力配法，對手至少要有 ${ezTxt} 這類組合（${best.minCards} 張反擊牌）才擋得住。`;}
-  else if(unk){cls='b-warn';title='看對手手牌：有下列組合就擋得住';
-    body=`${knPre}最省的擋法是未知牌裡有 ${ezTxt||'（不需要）'}（${best.minCards} 張），對手未知牌 ${opUnk} 張。你下回合守得住，不一定要 ALL IN。`;}
-  else if(myLethal){cls='b-good';title='ALL IN：照估計的手牌，對手擋不住';
-    body=`對手至少要 ${fmt(best.req)} 反擊值才活得下來。手牌估計若偏低，這個結論就不成立，看下面的「最小反擊需求」判斷風險。`;}
-  else if(iDie){cls='b-bad';title='下回合你大概守不住：只能 ALL IN 賭對手反擊不夠';
-    body=`對手下回合最強配法要你出 ${fmt(worst.req)} 反擊值，你估計的手牌擋不下。這回合就算打不死，也應該用最大壓力配法，逼對手把反擊用光。`;}
+  else if(iDie){cls='b-bad';title='下回合你大概守不住：只能 ALL IN 賭對手沒有反擊';
+    body=`用最大壓力配法，對手至少要有 ${ezTxt} 這類組合（${best.minCards} 張）才擋得住。${B.reserve?`<br>或者留 ${B.reserve.r} 張 DON!! 付反擊事件，下回合就守得住，見下方。`:''}`;}
   else {cls='b-warn';title='延伸對局：這回合打不死，下回合守得住';
-    body=`對手只要 ${best.hand.cards} 張牌就能擋下你這回合；你下回合需要 ${worst.hand?worst.hand.cards:'—'} 張牌防守。可以考慮保留資源或打角色。`;}
-
+    body=`${knPre}最省的擋法是未知牌裡有 ${ezTxt||'（不需要）'}（${best.minCards} 張），對手未知牌 ${opUnk} 張。看下方解怪比較決定要不要打角色。`;}
   lastBest=best;lastWorst=worst;renderBoard();
-
   res.innerHTML=`
   <div class="banner ${cls}"><div class="k">局面判斷</div><div class="v">${title}</div><p>${body}</p></div>
   <div class="cards2">
-    <section class="box"><h3 style="color:var(--me)">這回合：最大壓力配法</h3>
+    <section class="box"><h3 style="color:var(--me)">這回合：最大壓力配法（全打臉）</h3>
       <dl class="kv">
         <dt>最小反擊需求</dt><dd>${fmt(best.req)}（約 ${Math.ceil(best.req/2000)} 張2000反擊）</dd>
-        ${unk?'':`<dt>依估計手牌</dt><dd style="color:${myLethal?'var(--good)':'var(--ink)'}">${myLethal?'擋不住 → 斬殺':'擋得住，耗 '+best.hand.cards+' 張'}</dd>`}
-        <dt>對手阻擋者</dt><dd>${opBlockers} 隻</dd>
-        ${hasMyRush?`<dt>你下速攻</dt><dd>${myRushTxt||'不下比較強'}</dd>`:''}
+        <dt>對手阻擋者</dt><dd>${B.opBlockers} 隻（橫置的不算）</dd>
+        ${B.hasMyRush?`<dt>你下速攻</dt><dd>${B.myRushTxt||'不下比較強'}</dd>`:''}
       </dl>
-      ${myRushTxt&&myBase?`<p class="hint">不下速攻時，最小反擊需求是 ${fmt(myBase.req)}；下了變成 ${fmt(best.req)}。</p>`:''}
-      ${unk?comboHTML(best.front,S.op.hand,best.frontEvs):''}
+      ${B.myRushTxt&&B.myBase?`<p class="hint">不下速攻時，最小反擊需求是 ${fmt(B.myBase.req)}；下了變成 ${fmt(best.req)}。</p>`:''}
+      ${comboHTML(best.front||[],S.op.hand,best.frontEvs||[])}
       ${attackTable(best,S.op.leader)}
       ${altTable(A)}
     </section>
@@ -753,13 +887,42 @@ function compute(){
       <dl class="kv">
         <dt>你的最小反擊需求</dt><dd>${fmt(worst.req)}（約 ${Math.ceil(worst.req/2000)} 張2000反擊）</dd>
         <dt>依你的手牌</dt><dd style="color:${iDie?'var(--bad)':'var(--good)'}">${iDie?'守不住':'守得住，耗 '+worst.hand.cards+' 張'}</dd>
-        <dt>你能用的阻擋者</dt><dd>${myBlockers} 隻（這回合有攻擊的不算）</dd>
-        ${rush.length?`<dt>對手下速攻</dt><dd>${rushTxt||'不下比較強'}</dd>`:''}
+        <dt>你能用的阻擋者</dt><dd>${B.myBlockers} 隻（這回合有攻擊的不算）</dd>
+        <dt>付反擊事件的 DON!!</dt><dd>0（全部貼出去或拿去下速攻）</dd>
+        ${B.opHasRush?`<dt>對手下速攻</dt><dd>${B.rushTxt||'不下比較強'}</dd>`:''}
       </dl>
-      ${rushTxt&&base?`<p class="hint">對手不下速攻時，你需要 ${fmt(base.req)} 反擊值${base.lethal?'（也守不住）':'，'+(base.hand?'耗 '+base.hand.cards+' 張':'')}；下了速攻變成 ${fmt(worst.req)}。</p>`:''}
+      ${B.reserve?`<p class="hint" style="color:var(--warn)">如果這回合留 ${B.reserve.r} 張 DON!! 不貼，對手回合就能付反擊事件，你下回合守得住（耗 ${B.reserve.worst.hand.cards} 張）。代價：這回合對手只要 ${B.reserve.best.minCards} 張就擋得住（全貼是 ${best.minCards} 張）。</p>`:''}
+      ${B.rushTxt&&base?`<p class="hint">對手不下速攻時，你需要 ${fmt(base.req)} 反擊值${base.lethal?'（也守不住）':'，'+(base.hand?'耗 '+base.hand.cards+' 張':'')}；下了速攻變成 ${fmt(worst.req)}。</p>`:''}
       ${attackTable(worst,S.me.leader)}
     </section>
-  </div>`;
+  </div>
+  <section class="box" id="kobox"><h3>解怪比較</h3><p class="hint" id="koProg">搜尋解怪打法中…</p></section>`;
+  const st=$('calcState'); if(st) st.textContent='';
+}
+function renderKOProgress(p){const el=$('koProg'); if(el) el.textContent=`搜尋解怪打法中… ${p}%`;}
+function koCell(m){
+  if(!m) return '<span class="kobad">保不住（牌不夠）</span>';
+  return `<b>丟 ${m.cards} 張</b>・下次剩約 ${m.oppNext} 張<br><span class="${m.iDie?'kobad':'kogood'}">你下回合${m.iDie?'守不住':`守得住（用 ${m.myNeed} 張）`}</span>`;
+}
+function koMain(o){return o.assign.length?o.assign.map(c=>`${short(c.name)} +${c.don} 打 對手角色${c.ci+1}（${c.tp}）`).join('、'):'不解怪，全部打臉';}
+function koDesc(o){
+  const face=o.face.map(a=>`${short(a.name)}+${a.don}`).join(' ');
+  return `${koMain(o)}${face?`<br><small>打臉：${face}</small>`:''}`;
+}
+function renderKO(K){
+  const box=$('kobox'); if(!box) return;
+  if(K.none){box.innerHTML='<h3>解怪比較</h3><p class="hint">對手沒有橫置的角色，攻擊打不到角色。點對手角色，把「橫置中」打開，就會比較解怪打法。</p>';return;}
+  const B0=K.baseline, top=K.options[0];
+  let head;
+  if(top&&top.lethal&&!B0.lethal) head=`<p class="kohead kogood">解怪後可以斬殺：${koMain(top)}</p>`;
+  else if(K.better) head=`<p class="kohead kogood">穩健推薦：${koMain(top)}。不管對手保不保，結果都不比全打臉差。</p>`;
+  else if(B0.ns.iDie) head='<p class="kohead kobad">解怪也救不了你下回合，照局面判斷 ALL IN 打臉。</p>';
+  else head='<p class="kohead">不解怪（全打臉）最穩。下面列出解怪的結果供比較。</p>';
+  const rows=[B0].concat(K.options).map((o,i)=>`<tr${i===0?' class="kobase"':''}><td>${o.lethal?'<span class="pill p-fail">斬殺</span> ':''}${i===1&&K.better?'<span class="pill p-blk">推薦</span> ':''}${koDesc(o)}</td><td>${koCell(o.ns)}</td><td>${i===0?'—':koCell(o.s)}</td></tr>`).join('');
+  box.innerHTML=`<h3>解怪比較</h3>${head}
+    <div class="tbl"><table class="kot"><thead><tr><th>打法</th><th>對手不保（讓角色死）</th><th>對手保（丟牌救）</th></tr></thead><tbody>${rows}</tbody></table></div>
+    <p class="hint">「丟」＝對手這回合至少要丟的未知牌（已知的牌也可能一起用掉）。「下次剩」＝進入你下一次攻擊時對手手牌估計：現在手牌 − 丟 + 吃血拿到的生命卡 + 抽 1 − 下回合打出 ${S.op.play==null?2:S.op.play} 張。推薦是取對手兩種選擇裡對你比較差的那個來比。</p>
+    <p class="hint">已比較 ${K.done} 種打法${K.timedOut?`（時間到，共 ${K.total} 種，結果可能不是最佳）`:''}。對手只保部分角色的情況沒有列出。</p>`;
 }
 
 async function checkUpdate(){
