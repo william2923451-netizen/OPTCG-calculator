@@ -44,13 +44,18 @@ button{font-family:var(--f-body);cursor:pointer;color:inherit}
 .zone{display:flex;flex-direction:column;gap:8px;--c:var(--op);--cs:var(--op-soft)}
 .zone.me{--c:var(--me);--cs:var(--me-soft)}
 .top{display:grid;grid-template-columns:1fr minmax(76px,96px) 1fr;gap:10px;align-items:center}
-.leadw{position:relative;min-width:0;display:flex;justify-content:center}
-.leadw .lead{position:relative;z-index:1;width:100%}
-.tuck{position:absolute;z-index:0;top:10px;right:-16px;width:46%;aspect-ratio:63/88;border-radius:5px;border:1.5px dashed var(--don);background:var(--panel);color:var(--don);
-  font-family:var(--f-num);font-weight:900;font-size:11px;padding:0;overflow:hidden;transform:rotate(8deg);display:flex;align-items:flex-end;justify-content:center}
+.leadw{position:relative;min-width:0;display:flex;flex-direction:column;align-items:center;gap:4px}
+.leadw .lead{width:100%}
+.tuck{position:relative;width:100%;min-height:30px;border-radius:6px;border:1.5px dashed var(--don);background:var(--panel);color:var(--don);
+  font-family:var(--f-num);font-weight:900;font-size:12px;padding:0 6px;overflow:hidden;display:flex;align-items:center;justify-content:center}
 .tuck.on{border-style:solid;background:var(--don);color:#fff}
-.tuck img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover}
-.tuck span{position:relative;padding:0 2px 3px;text-shadow:0 0 3px rgba(0,0,0,.6)}
+.tuck img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;object-position:center 40%;opacity:.55}
+.tuck span{position:relative;text-shadow:0 0 3px rgba(0,0,0,.6);white-space:nowrap}
+.fxl{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:8px}
+.fxrow{display:flex;align-items:center;justify-content:space-between;gap:10px}
+.fxrow>div{min-width:0}.fxrow.off>div{opacity:.5;text-decoration:line-through}
+.fxtg{flex:none;width:52px;height:36px;border-radius:999px;border:1px solid var(--line);background:var(--bg);color:var(--muted);font-weight:700}
+.fxtg.on{background:var(--good);border-color:var(--good);color:#fff}
 .lead{background:none;border:none;padding:0;display:flex;flex-direction:column;align-items:center;gap:5px;min-width:0}
 .lead .card{width:100%;box-sizing:border-box}
 .lead .card .pw{font-size:clamp(16px,5vw,21px)}
@@ -75,7 +80,7 @@ button{font-family:var(--f-body);cursor:pointer;color:inherit}
 .cardw{position:relative;min-width:0}
 .cardw>.card{width:100%;box-sizing:border-box}
 .reset{margin:8px 0 0 8px;font-size:13px;padding:6px 12px;vertical-align:top}
-#saveTag{margin-left:8px;font-size:12px}
+#saveTag,#dataTag{margin-left:8px;font-size:12px}
 .rare{display:flex;flex-direction:column;gap:6px}
 .rpick{display:grid;grid-template-columns:44px 1fr auto;align-items:center;gap:8px;text-align:left;border:1px solid var(--line);background:var(--bg);color:var(--ink);border-radius:8px;padding:8px 10px;font-size:14px}
 .rpick .rp{font-family:var(--f-num);font-weight:700;color:var(--muted)}
@@ -243,6 +248,7 @@ details ul{margin:8px 0 0;padding-left:20px;color:var(--muted)}
     </div>
     <button class="ghost reset" id="resetBoard" data-reset="1">重設盤面</button>
     <span class="hint" id="saveTag" hidden>已記住上次的盤面</span>
+    <span class="hint" id="dataTag" hidden></span>
   </header>
 
   <div class="table" id="table">
@@ -279,6 +285,8 @@ details ul{margin:8px 0 0;padding-left:20px;color:var(--muted)}
       <li>我方「已橫置」（v24）：代表這回合已經攻擊過，不再參與這回合攻擊，對手回合也不能阻擋。用來在解怪後調整剩下的攻擊。</li>
       <li>阻擋者會死（v25）：你的攻擊力 ≥ 對手阻擋者力量時，阻擋者被 KO。對手會先用擋了不會死、或下回合本來就不攻擊的阻擋者。只有「不擋就守不住」時才當成他一定會擋，下回合少那隻攻擊者；否則照他不擋（對你最不利）算，另外列出擋了的結果。解怪比較裡的各種打法沒有算阻擋者死亡。</li>
       <li>我方角色左上的「橫」：設成已橫置（攻擊或解怪用過了），不會再攻擊，下回合也不能阻擋。打完一部分後把用過的角色按「橫」、把被解掉的對手角色移除，就能重算剩下怎麼打。</li>
+      <li>效果開關（v33）：結果區「卡片效果」每張都有開／關，關掉就當作沒有這個效果（例如紅綠魯夫活躍 DON!! 超過 5 張、或你知道對手不會用）。領導者貼的 DON!! 改成領導者旁邊的長條，點一下切換。</li>
+      <li>自動更新資料（v35）：GitHub 版每天由 GitHub Actions 到 optcg.one 抓最新比賽牌組，重算環境牌組、卡片資料、少見卡，存成 data.json；網頁打開時比內建的新就自動換上，標題下會顯示資料日期。Claude 預覽版只用內建資料。卡片效果（魯夫、白鬍子這些）是手寫的，新卡效果不會自動加入。</li>
       <li>記住盤面（v32）：盤面、手牌、牌組設定會存在這台裝置的瀏覽器，重新整理或關掉再開都會還原。按標題下的「重設盤面」回到範例盤面。換裝置或無痕視窗不會帶過去。</li>
       <li>常駐加力與減力（v31）：Sabo 領導者（OP13-004）生命 4 以上 −1000；領導者有 DON!!（點領導者旁的 DON!! 卡）且場上有 8 費以上角色時，領導者和全部角色 +1000，雙方攻擊、防守都算。Luffy & Ace 領導者（ST30-001）有 7000 以上角色時 −2000；對手回合名字是 Luffy／Ace 的角色 +3000（影響解怪）。金獅子（要有攻擊，丟 1 張）和 Kaido 領導者（DON!!−1）攻擊時讓對手 1 隻角色 −3000／−2000，解怪比較會試著用在其中一個目標。角色費用和名字只認從環境牌組選的角色。</li>
       <li>攻擊加力（v29）：Rocks 白鬍子（OP17-040）領導者攻擊時丟 1 張 +3000。你方：用了能斬殺才用（手牌少 1 張），不然只列出差別；對手方：下回合打你時一律當成會用。Moria 領導者「KO 自己 1 隻角色，全部 +1000」也算在對手下回合（取對你最不利的）。</li>
@@ -340,14 +348,16 @@ const EFX={
   'OP06-115':{name:"You're the One Who Should Disappear.",trigLife:{disc:1},txt:'【觸發】生命 0 時補 1 血，再丟 1 張'},
   'OP14-080':{name:'Gecko Moria 領導者',lifeAtk:{disc:3},allPlus:{p:1000},txt:'起動：KO 自己 1 隻 Thriller Bark 角色，領導者和全部角色 +1000；攻擊時丟 3 張：補 1 血'}
 };
+const fxOn=(d,id)=>!!id&&!!EFX[id]&&!(d.fxOff||[]).includes(id);   // 使用者可以關掉某張卡的效果
 function fxOf(d){   // 一方目前生效的效果（領導者＋場上角色）
-  const out=[]; if(EFX[d.lid]) out.push({...EFX[d.lid],id:d.lid,where:'領導者'});
-  (d.chars||[]).forEach((c,i)=>{if(c.cid&&EFX[c.cid]) out.push({...EFX[c.cid],id:c.cid,where:'角色'+(i+1),ci:i,rest:c.rest,atk:c.atk});});
+  const out=[]; if(fxOn(d,d.lid)) out.push({...EFX[d.lid],id:d.lid,where:'領導者'});
+  (d.chars||[]).forEach((c,i)=>{if(fxOn(d,c.cid)) out.push({...EFX[c.cid],id:c.cid,where:'角色'+(i+1),ci:i,rest:c.rest,atk:c.atk});});
   return out;
 }
 // 常駐力量調整（Sabo、Luffy & Ace）：own＝自己的回合；forceL＝當成領導者有貼 DON!!
 function statAdj(d,own,forceL){
   const r={lead:0,ch:(d.chars||[]).map(()=>0)};
+  if(!fxOn(d,d.lid)) return r;
   if(d.lid==='OP13-004'){
     if(d.life>=4) r.lead-=1000;
     if((forceL||d.ldon!==false)&&(d.chars||[]).some(c=>(c.cost||0)>=8)){r.lead+=1000; r.ch=r.ch.map(v=>v+1000);}
@@ -541,6 +551,9 @@ function applyFront(r,atks,def,evs){
   // 表格顯示的應對，跟「張數最少」的組合用同一個防守方案
   r.hand=r.lethal?null:(top&&top.pl?{cards:top.n,req:top.pl.cnt.reduce((s,a)=>s+a.need,0),take:top.pl.take,blocked:top.pl.blocked,cnt:top.pl.cnt,picks:null}:{cards:0,...(r.minPlan||{take:[],blocked:new Set(),cnt:[]}),picks:null});
   if(r.hand&&top&&top.pl&&top.pl.cnt.length){const ex=explainFront(top,def,evs); if(ex){r.hand.picks=ex.picks; r.hand.evs=ex.evs;}}
+  // 擋不住時也用「最接近擋住」的方案拆給表格看（用到超過手上張數）
+  if(r.lethal&&top&&top.pl){const ex=top.pl.cnt.length?explainFront(top,def,evs):null;
+    r.lethalPlan={take:top.pl.take,blocked:top.pl.blocked,cnt:top.pl.cnt,picks:ex?ex.picks:null,evs:ex?ex.evs:null};}
 }
 // 把「張數最少的組合」拆到每一下攻擊上（表格顯示用）：場上效果優先
 function explainFront(x,def,evs){
@@ -606,7 +619,7 @@ function sideAttackers(d,label,dead,atkFx,forceL){
   const lb=fx.find(f=>f.myTurnLeader);
   const ab=atkFx?fx.find(f=>f.atkLeader&&(!f.atkLeader.lid||f.atkLeader.lid===d.lid)):null;
   const list=[{name:(d.ldonFixed?'領導者（已貼1）':'領導者')+(ab?'（'+ab.name+' +'+ab.atkLeader.p/1000+'k）':''),p:d.leader+sa.lead+(lb?lb.myTurnLeader.p:0)+(ab?ab.atkLeader.p:0),da:d.lda||!!(lb&&lb.myTurnLeader.da),ub:d.lub,ci:-1}];
-  d.chars.forEach((c,i)=>{if(c.atk&&!(dead&&dead.includes(i))) list.push({name:label+'角色'+(i+1),p:c.p+sa.ch[i],da:c.da,ub:c.ub,ci:i,restBlk:!!(c.cid&&EFX[c.cid]&&EFX[c.cid].restBlk)});});
+  d.chars.forEach((c,i)=>{if(c.atk&&!(dead&&dead.includes(i))) list.push({name:label+'角色'+(i+1),p:c.p+sa.ch[i],da:c.da,ub:c.ub,ci:i,restBlk:!!(fxOn(d,c.cid)&&EFX[c.cid].restBlk)});});
   return list;
 }
 function sideDef(d,blockers,dDon){
@@ -666,7 +679,7 @@ function survival(S,dead,myBlockers,myHand,dDon,withView){
     if(view) view.real=defend(view.atks,survDef);   // 這個配法打你實際的手牌
   }
   // 你的 Captain John 這回合攻擊後橫置：對手只能攻擊他
-  const johnMe=S.me.lid==='OP17-039'&&S.me.chars.some((c,i)=>c.cid==='OP17-044'&&c.atk&&!(dead&&dead.includes(i)));
+  const johnMe=S.me.lid==='OP17-039'&&fxOn(S.me,'OP17-044')&&S.me.chars.some((c,i)=>c.cid==='OP17-044'&&c.atk&&!(dead&&dead.includes(i)));
   if(johnMe&&worst){worst={...worst,lethal:false,john:true,req:0,hand:{cards:0,req:0,take:[],blocked:new Set(),cnt:[],picks:null}};}
   return {worst,base,rushTxt,opHasRush:nr>0,view,viewA,viewRush,johnMe};
 }
@@ -697,7 +710,7 @@ function calcBase(S){
   const opBlockers=S.op.chars.filter(c=>c.blk&&!c.rest).length;
   const atkDef0=sideDef(S.op,opBlockers,S.op.defDon);
   const atkDef=meAtk.some(a=>a.restBlk)?{...atkDef0,blockers:Math.max(0,opBlockers-meAtk.filter(a=>a.restBlk).length)}:atkDef0;
-  const johnOp=S.op.lid==='OP17-039'&&S.op.chars.some(c=>c.cid==='OP17-044'&&c.rest);
+  const johnOp=S.op.lid==='OP17-039'&&fxOn(S.op,'OP17-044')&&S.op.chars.some(c=>c.cid==='OP17-044'&&c.rest);
   let A=null,best=null,myRushTxt='',myBase=null,myRushCnt=0,myExtra=[],myRushCost=0;
   const hasMyRush=rushPlans(S.me.rush,S.me.don,Math.max(0,5-S.me.chars.length),(extra,don,cnt,txt,cost)=>{
     const R=analyze(meAtk.concat(extra),don,atkDef);
@@ -787,7 +800,7 @@ function calcBase(S){
   if(sv.worst.lethal){
     const ids=[...new Set(S.me.deckIds||[])];
     const cand=ids.filter(id=>EFX[id]&&EFX[id].life).map(id=>({id,...EFX[id]}));
-    const L=EFX[S.me.lid]; if(L&&L.lifeAtk) cand.push({id:S.me.lid,name:L.name,life:1,don:0,disc:L.lifeAtk.disc,atk:1});
+    const L=fxOn(S.me,S.me.lid)&&EFX[S.me.lid]; if(L&&L.lifeAtk) cand.push({id:S.me.lid,name:L.name,life:1,don:0,disc:L.lifeAtk.disc,atk:1});
     for(const c of cand){
       if(c.don>S.me.don||(c.disc||0)+(c.atk?0:1)>myHand) continue;
       const S2={...S,me:{...S.me,life:S.me.life+1}};
@@ -823,7 +836,7 @@ function calcBase(S){
 function koSearch(S,B,budget,progress){
   const t0=Date.now();
   const oa=statAdj(S.op,false);
-  const targets=S.op.chars.map((c,i)=>({ci:i,p:c.p+oa.ch[i]+((c.cid&&EFX[c.cid]&&EFX[c.cid].oppTurnPow)||0)})).filter(t=>S.op.chars[t.ci].rest);
+  const targets=S.op.chars.map((c,i)=>({ci:i,p:c.p+oa.ch[i]+((fxOn(S.op,c.cid)&&EFX[c.cid].oppTurnPow)||0)})).filter(t=>S.op.chars[t.ci].rest);
   // 攻擊時讓對手角色 −力量（金獅子、Kaido 領導者）：每回合 1 次，用在其中一個解怪目標
   const debF=fxOf(S.me).find(f=>f.debuff&&(!f.debuff.needAtk||(f.ci!=null&&S.me.chars[f.ci]&&S.me.chars[f.ci].atk)));
   const deb=debF&&(!debF.debuff.disc||B.myHand>=debF.debuff.disc)?{name:debF.name,val:debF.debuff.val,disc:debF.debuff.disc||0,don:debF.debuff.don||0}:null;
@@ -915,7 +928,7 @@ function calcAll(S,budget,post){
 
 </script>
 <script>
-const APP_VERSION='v32';
+const APP_VERSION='v35';
 const S = {
   me:{ leader:5000, lda:false, lub:false, life:2, hand:4, c2:1, c1:2, evs:[], rush:[], don:10, defDon:0, lk:[], lke:[],
        chars:[{p:5000,atk:true,blk:false,da:false,ub:false},{p:7000,atk:true,blk:false,da:false,ub:false},{p:7000,atk:true,blk:false,da:false,ub:false},{p:3000,atk:false,blk:true,da:false,ub:false}] },
@@ -1047,6 +1060,22 @@ function rareList(side){
     else if(f&&f.dpow){kind='fx';label='防守效果（要在場上）';}
     return kind?{id,pct:+pct,kind,label,name:(c&&c.name)||(f&&f.name)||id}:null;}).filter(Boolean);
 }
+// 自動更新資料：GitHub 版每天由 GitHub Actions 抓 optcg.one 產生 data.json；比內建的新就換上
+let liveData=null;
+function applyLiveData(D){
+  if(!D||D.v!==1||!D.leaders||!D.leaders.length||!(D.date>META.date)) return false;
+  META.leaders=D.leaders; META.fmt=D.fmt; META.n=D.n; META.date=D.date;
+  for(const k in META_BY) delete META_BY[k]; META.leaders.forEach(L=>META_BY[L.id]=L);
+  for(const id in D.ch){const a=D.ch[id]; META_CHARS[id]={id,name:a[0],p:a[1]*1000,cost:a[2],counter:a[3]*1000,blk:a[4].includes('b'),da:a[4].includes('d'),rush:a[4].includes('r'),ub:a[4].includes('u')};}
+  for(const id in D.ev){const a=D.ev[id]; META_EVS[id]={id,name:a[0],cost:a[1],val:a[2]*1000,disc:a[3]};}
+  for(const id in D.ld){const a=D.ld[id]; META_LDS[id]={id,name:a[0],power:a[1]*1000,life:a[2]};}
+  for(const k in META_RARE) delete META_RARE[k]; Object.assign(META_RARE,D.rare||{});
+  liveData=D; return true;
+}
+async function loadLiveData(){
+  if(!/^https?:$/.test(location.protocol)) return;
+  try{const r=await fetch('data.json',{cache:'no-cache'}); if(!r.ok) return; if(applyLiveData(await r.json())){renderBoard(); if(sheet) renderSheet(); compute(); const t=$('dataTag'); if(t){t.textContent=`環境資料 ${META.date}（自動更新）`; t.hidden=false;}}}catch(_){}
+}
 function rareApply(snap,side){   // 勾選「算進去」的少見卡，加進計算用的狀態
   const d=snap[side], on=(S[side].rareOn||[]); if(!on.length) return;
   for(const r of rareList(side)){ if(!on.includes(r.id)) continue; const c=cardOf(r.id);
@@ -1172,8 +1201,8 @@ function renderZone(side){
   const hp=(pos)=>`<button class="stat hp ${pos}" id="${side}-st-life" data-open="life" data-s="${side}"><span class="l">HP</span><span class="v">${d.life}</span><span class="s">${(()=>{const k=(d.lk||[]).slice(0,d.life).filter(v=>v==='e'||v>0);return k.length?'已知 '+k.map(v=>v==='e'?'事件':v/1000+'k').join(' '):'生命';})()}</span></button>`;
   const dn=(pos)=>`<button class="stat dn ${pos}" id="${side}-st-don" data-open="don" data-s="${side}"><span class="l">${me?'可貼DON!!':'剩餘DON!!'}</span><span class="v">${me?d.don:d.defDon}</span><span class="s">${me?'這回合':'下回合 '+d.nextDon}</span></button>`;
   const on=ldonOn(side);
-  const tuck=needLdon(side)?`<button class="tuck${on?' on':''}" id="${side}-ldon" data-ldon="${side}" aria-pressed="${on}" aria-label="${me?'我方':'對手'}領導者下面${on?'貼了 1 張 DON!!，點一下拿掉':'沒有 DON!!，點一下貼 1 張'}">${on?`<img src="${DON_IMG}" alt="" onerror="this.remove()">`:''}<span>${on?'DON!!':'+DON'}</span></button>`:'';
-  const leadw=`<div class="leadw">${tuck}${lead}</div>`;
+  const tuck=needLdon(side)?`<button class="tuck${on?' on':''}" id="${side}-ldon" data-ldon="${side}" aria-pressed="${on}" aria-label="${me?'我方':'對手'}領導者下面${on?'貼了 1 張 DON!!，點一下拿掉':'沒有 DON!!，點一下貼 1 張'}">${on?`<img src="${DON_IMG}" alt="" onerror="this.remove()">`:''}<span>${on?'DON!!×1 貼在領導者':'領導者沒貼 DON!!'}</span></button>`:'';
+  const leadw=me?`<div class="leadw">${tuck}${lead}</div>`:`<div class="leadw">${lead}${tuck}</div>`;
   $('zone-'+side).innerHTML=me
     ?`<div class="chars">${slots.join('')}</div><div class="top">${dn('sl')+leadw+hp('sr')}</div>`
     :`<div class="top">${hp('sl')+leadw+dn('sr')}</div><div class="chars">${slots.join('')}</div>`;
@@ -1303,6 +1332,7 @@ document.addEventListener('click',e=>{
   if(t.dataset.addchar){const s=t.dataset.addchar;S[s].chars.push({p:5000,atk:s==='me',blk:false,da:false,ub:false});changed();
     openSheet('card',s,S[s].chars.length-1,$(`${s}-card${S[s].chars.length-1}`));return;}
   if(t.dataset.step){const v=clamp((+getP(t.dataset.step)||0)+(+t.dataset.d),+t.dataset.min,+t.dataset.max);setP(t.dataset.step,v);changed(true);return;}
+  if(t.dataset.fxtg){const sd=t.dataset.s,id=t.dataset.fxtg,d=S[sd]; d.fxOff=d.fxOff||[]; const k=d.fxOff.indexOf(id); if(k<0)d.fxOff.push(id); else d.fxOff.splice(k,1); markTouched(); schedule(); const b=$(`${sd}-fx-${id}`); if(b){const off=k<0; b.classList.toggle('on',!off); b.textContent=off?'關':'開'; b.setAttribute('aria-pressed',String(!off)); b.closest('li').classList.toggle('off',off);} return;}
   if(t.dataset.ldon){const sd=t.dataset.ldon,d=S[sd]; d.ldon=!ldonOn(sd); if(sd==='op'&&d.ldon&&d.defDon>9) d.defDon=9; changed(true); const b=$(sd+'-ldon'); if(b)b.focus(); return;}
   if(t.dataset.sw){setP(t.dataset.sw,!getP(t.dataset.sw));t.setAttribute('aria-pressed',!!getP(t.dataset.sw));changed(true);return;}
   if(t.dataset.delchar!==undefined){const sd=sheet.side;S[sd].chars.splice(+t.dataset.delchar,1);opener=null;closeSheet();changed();const a=$(`${sd}-add`);if(a)a.focus();return;}
@@ -1343,7 +1373,7 @@ function actPill(a,r,plan){
   return '';
 }
 function attackTable(best,defPower){
-  const plan=best.hand||best.minPlan;
+  const plan=best.hand||best.lethalPlan||best.minPlan;
   const r={defPower};
   return `<div class="tbl"><table><thead><tr><th>攻擊者</th><th>貼DON!!</th><th style="text-align:right">攻擊力</th><th style="text-align:right">需反擊</th><th>對方最佳應對</th></tr></thead><tbody>
   ${best.atks.map((a,idx)=>{a.idx=idx;const need=needOf(a.p,defPower);return `<tr><td>${a.name}${a.da?' (雙擊)':''}${a.ub?' (不可擋)':''}</td><td class="num">${a.don}</td><td class="num">${fmt(a.p)}</td><td class="num">${need?fmt(need):'—'}</td><td>${actPill(a,r,plan)}</td></tr>`}).join('')}
@@ -1448,7 +1478,9 @@ function renderBase(B){
   const ezTxt=easiest?comboText(easiest,best.frontEvs):'';
   let cls,title,body;
   if(myLethal){cls='b-good';title='ALL IN：對手的牌不夠，怎麼擋都擋不住';
-    body=`${knPre}最省的擋法還要 ${best.minCards} 張未知牌，對手只有 ${opUnk} 張未知牌（含吃血拿到的生命卡也不夠），${B.trig&&B.trig.op?'補血觸發見下方，其他觸發不計':'觸發不計'}。`;}
+    const hit=best.minHits||0, fm=fxMax(B.atkDef);
+    body=`${knPre}對手未知手牌 ${opUnk} 張${hit?`＋吃 ${hit} 血拿到 ${hit} 張＝${opUnk+hit} 張`:''}，最省的擋法要 ${best.minCards} 張${fm?`（已經算進場上效果 +${fmt(fm)}）`:''}，`+
+      `差 ${Math.max(1,best.minCards-opUnk-hit)} 張，${B.trig&&B.trig.op?'補血觸發見下方，其他觸發不計':'觸發不計'}。`;}
   else if(iDie){cls='b-bad';title='下回合你大概守不住：只能 ALL IN 賭對手沒有反擊';
     body=`用最大壓力配法，對手至少要有 ${ezTxt} 這類組合（${best.minCards} 張）才擋得住。${B.reserve?`<br>或者留 ${B.reserve.r} 張 DON!! 付反擊事件，下回合就守得住，見下方。`:''}`;}
   else {cls='b-warn';title='延伸對局：這回合打不死，下回合守得住';
@@ -1462,7 +1494,8 @@ function renderBase(B){
   <div class="cards2">
     <section class="box"><h3 style="color:var(--me)">這回合：最大壓力配法（全打臉）</h3>
       <dl class="kv">
-        <dt>最小反擊需求</dt><dd>${fmt(best.req)}（約 ${Math.ceil(best.req/2000)} 張2000反擊）</dd>
+        <dt>最小反擊需求</dt><dd>${fmt(best.req)}${fxMax(B.atkDef)?`（場上效果最多抵 ${fmt(fxMax(B.atkDef))}）`:''}</dd>
+        ${best.minCards!=null?`<dt>對手最少要丟</dt><dd>${best.minCards} 張未知牌${best.lethal?'（擋不住）':''}</dd>`:''}
         <dt>對手阻擋者</dt><dd>${B.opBlockers} 隻（橫置的不算）</dd>
         ${B.hasMyRush?`<dt>你下速攻</dt><dd>${B.myRushTxt||'不下比較強'}</dd>`:''}
       </dl>
@@ -1489,6 +1522,11 @@ function renderBase(B){
   </div>`;
   const st=$('calcState'); if(st) st.textContent='';
 }
+function fxMax(def){   // 場上防守效果最多能加多少（受活躍 DON!! 限制）
+  let don=def&&def.dDon||0, tot=0;
+  for(const v of (def&&def.fx)||[]){let k=v.n; if(v.cost) {k=Math.min(k,Math.floor(don/v.cost)); don-=k*v.cost;} tot+=k*v.val;}
+  return tot;
+}
 function simpleHTML(B){
   const {best,worst}=B, nm=a=>a.name.replace(/^我方/,'').replace(/^對手/,'對手').replace(/^速攻 /,'速攻');
   const plan=best.atks.filter(a=>a.p>0).map(a=>`${nm(a)} +${a.don}`).join('、');
@@ -1503,10 +1541,24 @@ function simpleHTML(B){
     <dt>要不要解怪</dt><dd id="koSimple">計算中…</dd>
   </dl><p class="hint">要看每一下攻擊的應對、其他配法和對手視角，切到「詳細」。</p></section>`;
 }
+// 卡片效果清單（UI 端，含關掉的）：每張可以點「開／關」
+function fxListUI(side){
+  const d=S[side], out=[];
+  if(d.lid&&EFX_UI[d.lid]&&EFX_UI[d.lid].txt) out.push({id:d.lid,where:'領導者',f:EFX_UI[d.lid]});
+  (d.chars||[]).forEach((c,i)=>{if(c.cid&&EFX_UI[c.cid]&&EFX_UI[c.cid].txt&&!out.some(x=>x.id===c.cid)) out.push({id:c.cid,where:'角色'+(i+1),f:EFX_UI[c.cid]});});
+  return out;
+}
+function fxListHTML(){
+  const L={me:fxListUI('me'),op:fxListUI('op')}; if(!L.me.length&&!L.op.length) return '';
+  const row=(sd,x)=>{const off=(S[sd].fxOff||[]).includes(x.id);
+    return `<li class="fxrow${off?' off':''}"><div><b style="color:var(--${sd})">${sd==='me'?'我方':'對手'}${x.where}・${x.f.name}</b><br><small>${x.f.txt}</small></div>
+      <button class="fxtg${off?'':' on'}" id="${sd}-fx-${x.id}" data-fxtg="${x.id}" data-s="${sd}" aria-pressed="${!off}" aria-label="${x.f.name} 效果${off?'已關閉，點一下打開':'已開啟，點一下關掉'}">${off?'關':'開'}</button></li>`;};
+  return `<section class="box"><h3>卡片效果</h3><ul class="fxl">${L.me.map(x=>row('me',x)).join('')}${L.op.map(x=>row('op',x)).join('')}</ul><p class="hint">只認得從環境牌組選的領導者和角色。條件不成立或對手沒打算用時，按「開」把它關掉。防守效果當成「不佔手牌的反擊」，只能對角色用的效果也當成任何攻擊都能用（偏保守）。</p></section>`;
+}
 function threatHTML(B){
   const T=B.threats||{op:[],me:[]}; let h='';
   const E=B.effects||{me:[],op:[]};
-  if(E.me.length||E.op.length) h+=`<section class="box"><h3>已套用的卡片效果</h3><ul class="thr">${E.me.map(f=>`<li><b style="color:var(--me)">我方${f.where}・${f.name}</b><br><small>${f.txt}</small></li>`).join('')}${E.op.map(f=>`<li><b style="color:var(--op)">對手${f.where}・${f.name}</b><br><small>${f.txt}</small></li>`).join('')}</ul><p class="hint">只認得從環境牌組選的領導者和角色。防守效果當成「不佔手牌的反擊」，只能對角色用的效果也當成任何攻擊都能用（偏保守）。</p></section>`;
+  h+=fxListHTML();
   const TG=B.trig||{};
   if(TG.op) h+=`<div class="banner b-warn"><div class="k">觸發補血風險（對手牌組）</div><p>對手牌組有 ${TG.op.k} 張補血觸發（${TG.op.name}）。最後一張生命剛好是它的機率約 <b>${Math.round(TG.op.p*100)}%</b>：${TG.op.saves?`翻到就<b>擋得住</b>（補 1 血後最省要 ${TG.op.cards} 張）。`:'就算翻到也還是擋不住。'}</p></div>`;
   if(TG.me) h+=`<div class="banner ${TG.me.saves?'b-good':'b-bad'}"><div class="k">觸發補血（你的牌組）</div><p>你牌組有 ${TG.me.k} 張補血觸發（${TG.me.name}）。最後一張生命剛好是它的機率約 <b>${Math.round(TG.me.p*100)}%</b>：${TG.me.saves?'翻到就守得住。':'就算翻到也守不住。'}</p></div>`;
@@ -1583,7 +1635,7 @@ function setMode(m){
   try{localStorage.setItem('optcg-mode',m);}catch(_){}
 }
 (function(){let m='simple';try{m=localStorage.getItem('optcg-mode')||'simple';}catch(_){} setMode(m==='detail'?'detail':'simple');})();
-loadState(); renderBoard(); renderRush(); compute(); checkUpdate();
+loadState(); renderBoard(); renderRush(); compute(); checkUpdate(); loadLiveData();
 </script>
 
 </body>
