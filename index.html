@@ -112,6 +112,10 @@ button{font-family:var(--f-body);cursor:pointer;color:inherit}
 .cface img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover}
 .cface .cname{position:relative;font-size:10px;font-weight:700;line-height:1.2;padding:3px 4px;background:var(--panel);opacity:.92;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .cface.sm{width:48px;flex:none}
+.stat.dn{position:relative;overflow:hidden}
+.stat.dn .donbg{position:absolute;inset:0;background-size:cover;background-position:center;opacity:.22;pointer-events:none}
+.stat.dn>span:not(.donbg){position:relative}
+.rtoggle{margin:2px 0;font-size:13px;padding:6px 12px;align-self:flex-start}
 .mres{display:grid;grid-auto-flow:column;grid-auto-columns:76px;gap:8px;overflow-x:auto;padding-bottom:4px;-webkit-overflow-scrolling:touch}
 .mpick{border:2px solid transparent;background:none;padding:2px;border-radius:7px;display:flex;flex-direction:column;gap:2px;text-align:center;min-width:0}
 .mpick.on{border-color:var(--c)}
@@ -257,6 +261,7 @@ details ul{margin:8px 0 0;padding-left:20px;color:var(--muted)}
       <button id="mode-simple" data-mode="simple" aria-pressed="true">簡單</button>
       <button id="mode-detail" data-mode="detail" aria-pressed="false">詳細</button>
     </div>
+    <button class="ghost reset" id="clearBoard" data-clear="1">清空版面</button>
     <button class="ghost reset" id="resetBoard" data-reset="1">重設盤面</button>
     <span class="hint" id="saveTag" hidden>已記住上次的盤面</span>
     <span class="hint" id="dataTag" hidden></span>
@@ -299,6 +304,7 @@ details ul{margin:8px 0 0;padding-left:20px;color:var(--muted)}
       <li>效果開關（v33）：結果區「卡片效果」每張都有開／關，關掉就當作沒有這個效果（例如紅綠魯夫活躍 DON!! 超過 5 張、或你知道對手不會用）。領導者貼的 DON!! 改成領導者旁邊的長條，點一下切換。</li>
       <li>角色清單（v36）：自動更新的資料會列出這個領導者的比賽牌組出現過的全部角色（附比例），不只共識牌組。計算用的反擊張數、反擊事件、速攻還是照共識牌組，少見的在「少見但可能有」自己選要不要算進去。</li>
       <li>自動更新資料（v35）：GitHub 版每天由 GitHub Actions 到 optcg.one 抓最新比賽牌組，重算環境牌組、卡片資料、少見卡，存成 data.json；網頁打開時比內建的新就自動換上，標題下會顯示資料日期。Claude 預覽版只用內建資料。卡片效果（魯夫、白鬍子這些）是手寫的，新卡效果不會自動加入。</li>
+      <li>清空版面（v40）：標題下的按鈕。保留選好的領導者和牌組，角色、手牌、HP、DON!!、生命卡都回到開局。「重設盤面」則是回到範例盤面。角色選單只先列出 15% 以上牌組有放的角色，不常用的按按鈕展開在第二排。</li>
       <li>記住盤面（v32）：盤面、手牌、牌組設定會存在這台裝置的瀏覽器，重新整理或關掉再開都會還原。按標題下的「重設盤面」回到範例盤面。換裝置或無痕視窗不會帶過去。</li>
       <li>常駐加力與減力（v31）：Sabo 領導者（OP13-004）生命 4 以上 −1000；領導者有 DON!!（點領導者旁的 DON!! 卡）且場上有 8 費以上角色時，領導者和全部角色 +1000，雙方攻擊、防守都算。Luffy & Ace 領導者（ST30-001）有 7000 以上角色時 −2000；對手回合名字是 Luffy／Ace 的角色 +3000（影響解怪）。金獅子（要有攻擊，丟 1 張）和 Kaido 領導者（DON!!−1）攻擊時讓對手 1 隻角色 −3000／−2000，解怪比較會試著用在其中一個目標。角色費用和名字只認從環境牌組選的角色。</li>
       <li>攻擊加力（v29）：Rocks 白鬍子（OP17-040）領導者攻擊時丟 1 張 +3000。你方：用了能斬殺才用（手牌少 1 張），不然只列出差別；對手方：下回合打你時一律當成會用。Moria 領導者「KO 自己 1 隻角色，全部 +1000」也算在對手下回合（取對你最不利的）。</li>
@@ -940,7 +946,7 @@ function calcAll(S,budget,post){
 
 </script>
 <script>
-const APP_VERSION='v39';
+const APP_VERSION='v42';
 const S = {
   me:{ leader:5000, lda:false, lub:false, life:2, hand:4, c2:1, c1:2, evs:[], rush:[], don:10, defDon:0, lk:[], lke:[],
        chars:[{p:5000,atk:true,blk:false,da:false,ub:false},{p:7000,atk:true,blk:false,da:false,ub:false},{p:7000,atk:true,blk:false,da:false,ub:false},{p:3000,atk:false,blk:true,da:false,ub:false}] },
@@ -1196,6 +1202,7 @@ function deckEvents(side){   // 這副牌（匯入、或環境資料）裡的反
   return [...m.values()].sort((a,b)=>(b.pct??0)-(a.pct??0)||b.val-a.val);
 }
 const evLab=v=>`${v.cost}C / +${v.val}${v.disc?` / 棄${v.disc}`:''}${v.gain?` / 回${v.gain}`:''}`;
+let showRareChars=false; const RARE_PCT=15;   // 角色選單：不常用（<15%）預設收起
 function deckChars(side){
   const d=S[side];
   if(d.dlist) return Object.entries(d.dlist).map(([id,n])=>{const c=cardOf(id);return c&&c.type==='char'?{...c,n}:null;}).filter(Boolean).sort((a,b)=>b.p-a.p||a.cost-b.cost);
@@ -1211,9 +1218,14 @@ function deckChars(side){
 function charPicker(side,i){
   const list=deckChars(side), c=S[side].chars[i];
   if(!list.length) return `<p class="note">在領導者面板選環境牌組或匯入牌組後，這裡可以直接選牌組裡的角色。也可以照下面手動輸入。</p>`;
+  const btn=x=>`<button class="mpick${c.cid===x.id?' on':''}" id="${side}-cp${i}-${x.id}" data-cpick="${x.id}" data-s="${side}" data-i="${i}" aria-pressed="${c.cid===x.id}" aria-label="${x.name} ${x.p}">
+      ${cardFace({name:x.name,color:'',img:imgFor(x.id)})}<small>${x.cost}C ${x.p}${x.pct!=null?` <b>${x.pct}%</b>`:''}<br>${[x.blk?'擋':'',x.da?'雙':'',x.ub?'穿':'',x.rush?'速':''].filter(Boolean).join('')||'&nbsp;'}</small></button>`;
+  // 常見（≥15% 的牌組有放，或沒有比例資料）放第一排；不常見放第二排，按鈕切換顯示
+  const common=list.filter(x=>x.pct==null||x.pct>=RARE_PCT), rare=list.filter(x=>x.pct!=null&&x.pct<RARE_PCT);
   return `<div class="sh-t">從牌組選角色（${S[side].deck?S[side].deck.name:''}）</div>
-    <div class="mres">${list.map(x=>`<button class="mpick${c.cid===x.id?' on':''}" id="${side}-cp${i}-${x.id}" data-cpick="${x.id}" data-s="${side}" data-i="${i}" aria-pressed="${c.cid===x.id}" aria-label="${x.name} ${x.p}">
-      ${cardFace({name:x.name,color:'',img:imgFor(x.id)})}<small>${x.cost}C ${x.p}${x.pct!=null?` <b>${x.pct}%</b>`:''}<br>${[x.blk?'擋':'',x.da?'雙':'',x.ub?'穿':'',x.rush?'速':''].filter(Boolean).join('')||'&nbsp;'}</small></button>`).join('')}</div>
+    <div class="mres">${common.map(btn).join('')}</div>
+    ${rare.length?`<button class="ghost rtoggle" id="${side}-cp${i}-rare" data-rarechars="1" aria-expanded="${showRareChars}">${showRareChars?'隱藏':'顯示'}不常用角色（不到 ${RARE_PCT}%，${rare.length} 張）</button>
+    ${showRareChars?`<div class="mres">${rare.map(btn).join('')}</div>`:''}`:''}
     <p class="note">${META_BY[S[side].lid]&&META_BY[S[side].lid].all&&!S[side].dlist?'列出這個領導者的比賽牌組出現過的全部角色，照力量由高到低排；百分比＝有放這張的牌組比例。':S[side].dlist?'列出你匯入的牌組裡的角色。':'目前是內建資料：只有共識牌組和少見卡裡的角色（有百分比的是少見卡）。GitHub 版更新資料後會列出全部角色。'}</p>
     <p class="note">選了會帶入力量和關鍵字；DON!! 或效果加的力量請再手動調。</p>`;
 }
@@ -1265,13 +1277,13 @@ function renderZone(side){
       aria-label="${me?'我方':'對手'}領導者，力量${d.leader}，手牌${d.hand}張${don?'，配DON!! '+don:''}，點擊設定領導者與手牌">
       ${cardTile(side,-1,true)}<span class="handcap">手牌 <b>${d.hand}</b> ${handSub}</span></button>`;
   const hp=(pos)=>`<button class="stat hp ${pos}" id="${side}-st-life" data-open="life" data-s="${side}"><span class="l">HP</span><span class="v">${d.life}</span><span class="s">${(()=>{const k=(d.lk||[]).slice(0,d.life).filter(v=>v==='e'||v>0);return k.length?'已知 '+k.map(v=>v==='e'?'事件':v/1000+'k').join(' '):'生命';})()}</span></button>`;
-  const dn=(pos)=>`<button class="stat dn ${pos}" id="${side}-st-don" data-open="don" data-s="${side}"><span class="l">${me?'可貼DON!!':'剩餘DON!!'}</span><span class="v">${me?d.don:d.defDon}</span><span class="s">${me?'這回合':'下回合 '+d.nextDon}</span></button>`;
+  const dn=(pos)=>`<button class="stat dn ${pos}" id="${side}-st-don" data-open="don" data-s="${side}"><span class="donbg" style="background-image:url('${DON_IMG}')"></span><span class="l">${me?'可貼DON!!':'剩餘DON!!'}</span><span class="v">${me?d.don:d.defDon}</span><span class="s">${me?'這回合':'下回合 '+d.nextDon}</span></button>`;
   const on=ldonOn(side);
   const tuck=needLdon(side)?`<button class="tuck${on?' on':''}" id="${side}-ldon" data-ldon="${side}" aria-pressed="${on}" aria-label="${me?'我方':'對手'}領導者下面${on?'貼了 1 張 DON!!，點一下拿掉':'沒有 DON!!，點一下貼 1 張'}">${on?`<img src="${DON_IMG}" alt="" onerror="this.remove()">`:''}<span>${on?'DON!!×1 貼在領導者':'領導者沒貼 DON!!'}</span></button>`:'';
   const leadw=me?`<div class="leadw">${tuck}${lead}</div>`:`<div class="leadw">${lead}${tuck}</div>`;
   $('zone-'+side).innerHTML=me
-    ?`<div class="chars">${slots.join('')}</div><div class="top">${dn('sl')+leadw+hp('sr')}</div>`
-    :`<div class="top">${hp('sl')+leadw+dn('sr')}</div><div class="chars">${slots.join('')}</div>`;
+    ?`<div class="chars">${slots.join('')}</div><div class="top">${hp('sl')+leadw+dn('sr')}</div>`
+    :`<div class="top">${dn('sl')+leadw+hp('sr')}</div><div class="chars">${slots.join('')}</div>`;
 }
 function renderBoard(){renderZone('op');renderZone('me');}
 function renderRush(){
@@ -1392,6 +1404,8 @@ document.addEventListener('click',e=>{
   const t=e.target.closest('button,[data-close]')||e.target;
   if(t.id==='scrim'||t.dataset.close){closeSheet();return;}
   if(t.dataset.reload){location.reload();return;}
+  if(t.dataset.rarechars){showRareChars=!showRareChars; renderSheet(); const b=$(t.id); if(b)b.focus(); return;}
+  if(t.dataset.clear){clearBoard(); return;}
   if(t.dataset.reset){try{localStorage.removeItem(SAVE_KEY);}catch(_){} location.reload();return;}
   if(t.dataset.mode){setMode(t.dataset.mode);return;}
   if(t.dataset.cpick){pickChar(t.dataset.s,+t.dataset.i,t.dataset.cpick);changed(true);return;}
@@ -1526,6 +1540,15 @@ function loadState(){
     if(o.touched){touched=true;const x=$('exTag');if(x)x.hidden=true;}
     const tg=$('saveTag'); if(tg) tg.hidden=false;
     return true;}catch(_){return false;}
+}
+// 清空版面：留下選好的領導者和牌組，其他（角色、手牌、HP、DON!!、生命卡）回到開局
+function clearBoard(){
+  for(const sd of ['me','op']){const d=S[sd], L=d.lid&&(META_LDS[d.lid]||META_BY[d.lid]);
+    d.chars=[]; d.c2=0; d.c1=0; d.evs=[]; d.lk=[]; d.lke=[]; d.hand=5; d.life=L&&L.life?L.life:5; d.lda=false; d.lub=false;
+    if(L&&L.power) d.leader=L.power;}
+  S.me.don=10; S.op.defDon=0; S.op.nextDon=10;
+  markTouched(); closeSheet&&sheet&&closeSheet(); changed();
+  const tg=$('saveTag'); if(tg) tg.hidden=true;
 }
 function compute(){
   saveState();
