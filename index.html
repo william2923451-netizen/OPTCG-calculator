@@ -44,6 +44,13 @@ button{font-family:var(--f-body);cursor:pointer;color:inherit}
 .zone{display:flex;flex-direction:column;gap:8px;--c:var(--op);--cs:var(--op-soft)}
 .zone.me{--c:var(--me);--cs:var(--me-soft)}
 .top{display:grid;grid-template-columns:1fr minmax(76px,96px) 1fr;gap:10px;align-items:center}
+.leadw{position:relative;min-width:0;display:flex;justify-content:center}
+.leadw .lead{position:relative;z-index:1;width:100%}
+.tuck{position:absolute;z-index:0;top:10px;right:-16px;width:46%;aspect-ratio:63/88;border-radius:5px;border:1.5px dashed var(--don);background:var(--panel);color:var(--don);
+  font-family:var(--f-num);font-weight:900;font-size:11px;padding:0;overflow:hidden;transform:rotate(8deg);display:flex;align-items:flex-end;justify-content:center}
+.tuck.on{border-style:solid;background:var(--don);color:#fff}
+.tuck img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover}
+.tuck span{position:relative;padding:0 2px 3px;text-shadow:0 0 3px rgba(0,0,0,.6)}
 .lead{background:none;border:none;padding:0;display:flex;flex-direction:column;align-items:center;gap:5px;min-width:0}
 .lead .card{width:100%;box-sizing:border-box}
 .lead .card .pw{font-size:clamp(16px,5vw,21px)}
@@ -268,6 +275,9 @@ details ul{margin:8px 0 0;padding-left:20px;color:var(--muted)}
       <li>我方「已橫置」（v24）：代表這回合已經攻擊過，不再參與這回合攻擊，對手回合也不能阻擋。用來在解怪後調整剩下的攻擊。</li>
       <li>阻擋者會死（v25）：你的攻擊力 ≥ 對手阻擋者力量時，阻擋者被 KO。對手會先用擋了不會死、或下回合本來就不攻擊的阻擋者。只有「不擋就守不住」時才當成他一定會擋，下回合少那隻攻擊者；否則照他不擋（對你最不利）算，另外列出擋了的結果。解怪比較裡的各種打法沒有算阻擋者死亡。</li>
       <li>我方角色左上的「橫」：設成已橫置（攻擊或解怪用過了），不會再攻擊，下回合也不能阻擋。打完一部分後把用過的角色按「橫」、把被解掉的對手角色移除，就能重算剩下怎麼打。</li>
+      <li>常駐加力與減力（v31）：Sabo 領導者（OP13-004）生命 4 以上 −1000；領導者有 DON!!（點領導者旁的 DON!! 卡）且場上有 8 費以上角色時，領導者和全部角色 +1000，雙方攻擊、防守都算。Luffy & Ace 領導者（ST30-001）有 7000 以上角色時 −2000；對手回合名字是 Luffy／Ace 的角色 +3000（影響解怪）。金獅子（要有攻擊，丟 1 張）和 Kaido 領導者（DON!!−1）攻擊時讓對手 1 隻角色 −3000／−2000，解怪比較會試著用在其中一個目標。角色費用和名字只認從環境牌組選的角色。</li>
+      <li>攻擊加力（v29）：Rocks 白鬍子（OP17-040）領導者攻擊時丟 1 張 +3000。你方：用了能斬殺才用（手牌少 1 張），不然只列出差別；對手方：下回合打你時一律當成會用。Moria 領導者「KO 自己 1 隻角色，全部 +1000」也算在對手下回合（取對你最不利的）。</li>
+      <li>領導者下面的 DON!!（v28）：紅綠魯夫這類【DON!!×1】領導者，卡片旁會出現 DON!! 卡，點一下切換有沒有貼。我方有貼：固定 1 張在領導者（這回合 +1000，可貼的 DON!! 少 1 張），對手回合可以用效果；對手有貼：剩餘 DON!! 最多 9 張。DON!! 卡圖在 GitHub 版才會顯示。</li>
       <li>【DON!!×1】（v27）：紅綠魯夫領導者效果要領導者身上有 DON!!。你方照這回合配法有沒有貼到領導者判斷；對手方在對手領導者面板設定（預設有）。</li>
       <li>少見卡（v26）：選環境牌組時，不到 4 成牌組有放的反擊事件、速攻、補血卡會列出來並附比例，預設不算；在領導者面板按「算進去」才會加入計算。</li>
       <li>攻擊一律打領導者，不算打角色、KO、效果、觸發（觸發可能直接翻盤）。</li>
@@ -290,11 +300,14 @@ details ul{margin:8px 0 0;padding-left:20px;color:var(--muted)}
 // vsChar：只能對付角色的攻擊（計算時視為任一下都能用，偏樂觀）；leaderOnly：只加在領導者
 const EFX={
   'OP13-001':{name:'Luffy（紅綠）領導者',dpow:{val:2000,cost:1,n:'don5',needLdon:1},txt:'【DON!!×1】被攻擊時，活躍 DON!! 5 張以下：每橫置 1 張 DON!! +2000（領導者身上要有 DON!!）'},
-  'OP17-058':{name:'Kaido 領導者',dpow:{val:2000,cost:1,n:1,vsChar:1},txt:'被攻擊時 DON!!−1：攻擊的角色 −2000（每回合 1 次）'},
+  'OP17-058':{name:'Kaido 領導者',dpow:{val:2000,cost:1,n:1,vsChar:1},debuff:{val:2000,don:1},txt:'被攻擊時 DON!!−1：攻擊的角色 −2000（每回合 1 次）'},
   'OP05-098':{name:'Enel（黃）領導者',lifePlus:1,txt:'對手回合生命變 0 時補 1 血（再丟 1 張）'},
-  'OP17-040':{name:'Edward.Newgate',dpow:{val:3000,disc:1,n:1,leaderOnly:1},txt:'領導者被攻擊時丟 1 張：+3000（每回合 1 次）'},
+  'OP13-004':{name:'Sabo 領導者',ldon:1,txt:'生命 4 以上領導者 −1000；【DON!!×1】有 8 費以上角色時，領導者和全部角色 +1000'},
+  'ST30-001':{name:'Luffy & Ace 領導者',txt:'有 7000 以上角色時領導者 −2000；對手回合 Luffy／Ace 角色 +3000'},
+  'OP17-040':{name:'Edward.Newgate',dpow:{val:3000,disc:1,n:1,leaderOnly:1},atkLeader:{p:3000,disc:1,lid:'OP17-039'},txt:'Rocks 領導者攻擊或被攻擊時丟 1 張：領導者 +3000（每回合 1 次）'},
+  'OP11-041':{name:'Nami 領導者',dpow:{val:2000,disc:1,n:1,leaderOnly:1,needLdon:1},txt:'【DON!!×1】被攻擊時丟 1 張：領導者 +2000（每回合 1 次）'},
   'OP17-049':{name:'Charlotte Linlin',dpow:{val:1000,disc:1,n:1},txt:'被攻擊時丟 1 張：+1000（每回合 1 次）'},
-  'OP17-048':{name:'Shiki',dpow:{val:3000,disc:1,n:1,vsChar:1},txt:'被攻擊時丟 1 張 Rocks 卡：攻擊的角色 −3000（每回合 1 次）'},
+  'OP17-048':{name:'Shiki',dpow:{val:3000,disc:1,n:1,vsChar:1},debuff:{val:3000,disc:1,needAtk:1},txt:'被攻擊時丟 1 張 Rocks 卡：攻擊的角色 −3000（每回合 1 次）'},
   'EB05-046':{name:'Yamato',dpow:{val:2000,disc:1,n:1,leaderOnly:1},txt:'被攻擊時丟 1 張：領導者基本力量變 7000（墓地 10 張以上）'},
   'OP16-015':{name:'Monkey.D.Luffy',dpow:{val:2000,disc:1,n:1,leaderOnly:1},txt:'被攻擊時丟 1 張 8000 角色：領導者基本力量變 7000'},
   'OP16-003':{name:'Edward.Newgate',myTurnLeader:{p:2000,da:1},txt:'自己回合領導者 +2000 並獲得雙重攻擊'},
@@ -320,12 +333,25 @@ const EFX={
   'OP17-114':{name:'Sweet 3 Generals',life:1,don:8,cond:'另外橫置 2 DON!!'},
   // 觸發補血：最後一張生命卡翻到它時（生命變 0）補 1 血，再丟 1 張手牌
   'OP06-115':{name:"You're the One Who Should Disappear.",trigLife:{disc:1},txt:'【觸發】生命 0 時補 1 血，再丟 1 張'},
-  'OP14-080':{name:'Gecko Moria 領導者',lifeAtk:{disc:3},txt:'攻擊時丟 3 張：補 1 血'}
+  'OP14-080':{name:'Gecko Moria 領導者',lifeAtk:{disc:3},allPlus:{p:1000},txt:'起動：KO 自己 1 隻 Thriller Bark 角色，領導者和全部角色 +1000；攻擊時丟 3 張：補 1 血'}
 };
 function fxOf(d){   // 一方目前生效的效果（領導者＋場上角色）
   const out=[]; if(EFX[d.lid]) out.push({...EFX[d.lid],id:d.lid,where:'領導者'});
   (d.chars||[]).forEach((c,i)=>{if(c.cid&&EFX[c.cid]) out.push({...EFX[c.cid],id:c.cid,where:'角色'+(i+1),ci:i,rest:c.rest,atk:c.atk});});
   return out;
+}
+// 常駐力量調整（Sabo、Luffy & Ace）：own＝自己的回合；forceL＝當成領導者有貼 DON!!
+function statAdj(d,own,forceL){
+  const r={lead:0,ch:(d.chars||[]).map(()=>0)};
+  if(d.lid==='OP13-004'){
+    if(d.life>=4) r.lead-=1000;
+    if((forceL||d.ldon!==false)&&(d.chars||[]).some(c=>(c.cost||0)>=8)){r.lead+=1000; r.ch=r.ch.map(v=>v+1000);}
+  }
+  if(d.lid==='ST30-001'){
+    if((d.chars||[]).some(c=>(c.bp!=null?c.bp:c.p)>=7000)) r.lead-=2000;
+    if(!own) (d.chars||[]).forEach((c,i)=>{if(/Monkey\.D\.Luffy|Portgas\.D\.Ace/.test(c.name||'')) r.ch[i]+=3000;});
+  }
+  return r;
 }
 function fxDefense(d,dDon){  // 換成防守時能用的「不佔手牌」反擊資源
   const items=[];
@@ -509,6 +535,36 @@ function applyFront(r,atks,def,evs){
   r.lethal=fr.length>0&&!ok.length;
   // 表格顯示的應對，跟「張數最少」的組合用同一個防守方案
   r.hand=r.lethal?null:(top&&top.pl?{cards:top.n,req:top.pl.cnt.reduce((s,a)=>s+a.need,0),take:top.pl.take,blocked:top.pl.blocked,cnt:top.pl.cnt,picks:null}:{cards:0,...(r.minPlan||{take:[],blocked:new Set(),cnt:[]}),picks:null});
+  if(r.hand&&top&&top.pl&&top.pl.cnt.length){const ex=explainFront(top,def,evs); if(ex){r.hand.picks=ex.picks; r.hand.evs=ex.evs;}}
+}
+// 把「張數最少的組合」拆到每一下攻擊上（表格顯示用）：場上效果優先
+function explainFront(x,def,evs){
+  const lg=lifeGain(def,x.hits);
+  const E=(def.fx||[]).map(v=>({...v,cap:v.n}))
+    .concat(def.evs.filter(v=>v.n>0&&v.val>0).map(v=>({...v,cap:v.n})))
+    .concat(evs.map((v,q)=>({...v,cap:x.u[q]||0})))
+    .concat(lg.evs.map(v=>({...v,cap:1}))).filter(v=>v.cap>0);
+  const n2=x.a+def.c2+lg.k2, n1=x.b+def.c1+lg.k1, needs=x.pl.cnt.map(a=>a.need);
+  const out=[];
+  function go(i,rem,r2,r1,don){
+    if(i===needs.length) return true;
+    const use=new Array(E.length).fill(0);
+    function pick(j,pw,c){
+      if(j===E.length){
+        for(let t=0;t<=r2;t++){const rest=needs[i]-pw-t*2000, o=rest>0?Math.ceil(rest/1000):0;
+          if(o<=r1){ out[i]={ev:use.slice(),t,o}; if(go(i+1,rem.map((v,q)=>v-use[q]),r2-t,r1-o,don-c)) return true; }
+          if(rest<=0) break;}
+        return false;
+      }
+      for(let e=Math.min(rem[j],Math.ceil(Math.max(0,needs[i]-pw)/E[j].val),E[j].cost?Math.floor((don-c)/E[j].cost):rem[j]);e>=0;e--){
+        if(pw>=needs[i]&&e>0) continue;
+        use[j]=e; if(pick(j+1,pw+e*E[j].val,c+e*E[j].cost)) return true;
+      }
+      use[j]=0; return false;
+    }
+    return pick(0,0,0);
+  }
+  return go(0,E.map(v=>v.cap),n2,n1,def.dDon)?{picks:out.slice(0,needs.length),evs:E}:null;
 }
 
 function cmpR(a,b){return (b.lethal-a.lethal)||((b.minCards??(b.hand?b.hand.cards:99))-(a.minCards??(a.hand?a.hand.cards:99)))||(b.req-a.req);}
@@ -539,16 +595,18 @@ function analyze(attackers,don,def){
   return results;
 }
 
-function sideAttackers(d,label,dead){
+function sideAttackers(d,label,dead,atkFx,forceL){
   const fx=fxOf(d).filter(f=>!(dead&&f.ci!=null&&dead.includes(f.ci)));
+  const sa=statAdj(d,true,forceL);
   const lb=fx.find(f=>f.myTurnLeader);
-  const list=[{name:'領導者',p:d.leader+(lb?lb.myTurnLeader.p:0),da:d.lda||!!(lb&&lb.myTurnLeader.da),ub:d.lub,ci:-1}];
-  d.chars.forEach((c,i)=>{if(c.atk&&!(dead&&dead.includes(i))) list.push({name:label+'角色'+(i+1),p:c.p,da:c.da,ub:c.ub,ci:i,restBlk:!!(c.cid&&EFX[c.cid]&&EFX[c.cid].restBlk)});});
+  const ab=atkFx?fx.find(f=>f.atkLeader&&(!f.atkLeader.lid||f.atkLeader.lid===d.lid)):null;
+  const list=[{name:(d.ldonFixed?'領導者（已貼1）':'領導者')+(ab?'（'+ab.name+' +'+ab.atkLeader.p/1000+'k）':''),p:d.leader+sa.lead+(lb?lb.myTurnLeader.p:0)+(ab?ab.atkLeader.p:0),da:d.lda||!!(lb&&lb.myTurnLeader.da),ub:d.lub,ci:-1}];
+  d.chars.forEach((c,i)=>{if(c.atk&&!(dead&&dead.includes(i))) list.push({name:label+'角色'+(i+1),p:c.p+sa.ch[i],da:c.da,ub:c.ub,ci:i,restBlk:!!(c.cid&&EFX[c.cid]&&EFX[c.cid].restBlk)});});
   return list;
 }
 function sideDef(d,blockers,dDon){
   const lp=fxOf(d).some(f=>f.lifePlus)&&d.life>=1&&d.hand>0;
-  return {fx:fxDefense(d,dDon),lifePlus:lp,power:d.leader,life:d.life+(lp?1:0),blockers,c2:d.c2,c1:d.c1,evs:d.evs,dDon,unknown:!!d.unknown,hand:d.hand,pevs:d.pevs||[],cap2:d.deck?Math.max(0,d.deck.c2-d.c2):null,cap1:d.deck?Math.max(0,d.deck.c1-d.c1):null,lk:(d.lk||[]).slice(0,d.life),lke:(d.lke||[]).slice(0,d.life)};
+  return {fx:fxDefense(d,dDon),lifePlus:lp,power:d.leader+statAdj(d,false).lead,life:d.life+(lp?1:0),blockers,c2:d.c2,c1:d.c1,evs:d.evs,dDon,unknown:!!d.unknown,hand:d.hand,pevs:d.pevs||[],cap2:d.deck?Math.max(0,d.deck.c2-d.c2):null,cap1:d.deck?Math.max(0,d.deck.c1-d.c1):null,lk:(d.lk||[]).slice(0,d.life),lke:(d.lke||[]).slice(0,d.life)};
 }
 // 試每種「下幾隻速攻」：費用從 DON!! 扣，剩下的再分配
 function rushPlans(list,don,room,fn){
@@ -568,15 +626,26 @@ function rushPlans(list,don,room,fn){
 // 對手下回合打你：dead＝這回合被你解掉的角色；dDon＝你留下來付反擊事件的 DON!!
 function survival(S,dead,myBlockers,myHand,dDon,withView){
   const survDef=sideDef(S.me,myBlockers,dDon); survDef.hand=myHand;
-  const opAtk=sideAttackers(S.op,'對手',dead);
+  const opAtk=sideAttackers(S.op,'對手',dead,true,true);
   const alive=S.op.chars.length-dead.length;
+  // 對手領導者「全部 +1000」類效果（Moria）：KO 自己 1 隻角色換全部 +1000，取對你最不利的
+  const variants=[opAtk];
+  const ap=fxOf(S.op).find(f=>f.allPlus);
+  if(ap&&alive>0){
+    const live=S.op.chars.map((c,i)=>({c,i})).filter(x=>!(dead&&dead.includes(x.i)));
+    const idle=live.find(x=>!x.c.atk);
+    let kill=idle?null:live.filter(x=>x.c.atk).sort((a,b)=>a.c.p-b.c.p)[0];
+    variants.push(opAtk.filter(a=>!kill||a.ci!==kill.i).map(a=>({...a,p:a.p+ap.allPlus.p,name:a.name+'+1k'})));
+  }
   let worst=null,base=null,rushTxt='';
   const blkAdj=(atks,def)=>{const all=atks.concat([]); if(all.some(a=>a.restAll)) return {...def,blockers:0};
     const k=all.filter(a=>a.restBlk).length; return k?{...def,blockers:Math.max(0,def.blockers-k)}:def;};
   const nr=rushPlans(S.op.rush,S.op.nextDon,Math.max(0,5-alive),(extra,don,cnt,txt)=>{
-    const r=analyze(opAtk.concat(extra),don,blkAdj(opAtk.concat(extra),survDef))[0];
-    if(!cnt) base=r;
-    if(!worst||cmpR(r,worst)<0){worst=r;rushTxt=txt;}
+    for(const oa of variants){
+      const r=analyze(oa.concat(extra),don,blkAdj(oa.concat(extra),survDef))[0];
+      if(!cnt&&(!base||cmpR(r,base)<0)) base=r;
+      if(!worst||cmpR(r,worst)<0){worst=r;rushTxt=txt;}
+    }
   });
   // 對手視角：他不知道你的手牌與生命卡，用同一套「未知手牌」算法找他的最大壓力配法
   let view=null,viewA=null,viewRush='';
@@ -631,12 +700,24 @@ function calcBase(S){
     if(!best||cmpR(R[0],best)<0){best=R[0];A=R.slice(0,5);myRushTxt=txt;myRushCnt=cnt;myExtra=extra;myRushCost=cost;}
   });
   const myBlockers=S.me.chars.filter(c=>c.blk&&!c.atk).length;
-  const myHand=Math.max(0,S.me.hand-myRushCnt);
+  // 我方攻擊時丟牌加攻（Rocks 白鬍子）：斬殺才用，否則列出用了的差別
+  let atkFx=null;
+  { const meAtkB=sideAttackers(S.me,'我方',null,true);
+    if(meAtkB[0].p!==meAtk[0].p){
+      const f=fxOf(S.me).find(f=>f.atkLeader&&(!f.atkLeader.lid||f.atkLeader.lid===S.me.lid));
+      if(f&&S.me.hand-myRushCnt>=f.atkLeader.disc){
+        const RB=analyze(meAtkB.concat(myExtra),Math.max(0,S.me.don-myRushCost),atkDef);
+        atkFx={name:f.name,p:f.atkLeader.p,disc:f.atkLeader.disc,used:false,minCards:RB[0].minCards,lethal:RB[0].lethal,base:best.minCards};
+        if(RB[0].lethal&&!best.lethal){best=RB[0];A=RB.slice(0,5);atkFx.used=true;}
+      }
+    }
+  }
+  const myHand=Math.max(0,S.me.hand-myRushCnt-(atkFx&&atkFx.used?atkFx.disc:0));
   // DON!! 全部貼出去或拿去下速攻，對手回合就沒有 DON!! 付反擊事件
   // 阻擋者擋了會死：如果對手不用它擋就守不住，就一定會擋，下回合少一隻攻擊者
   let blk={dead:[],uses:[],forced:false,alt:null};
   if(best&&!best.lethal){
-    const bd=blockDeaths(best.hand||best.minPlan,best.atks,S.op.chars);
+    const oadj=statAdj(S.op,false); const bd=blockDeaths(best.hand||best.minPlan,best.atks,S.op.chars.map((c,i)=>({...c,p:c.p+oadj.ch[i]})));
     if(bd.dead.length){
       const d2={...atkDef,blockers:Math.max(0,atkDef.blockers-bd.dead.length)};
       const r2=defend(best.atks,d2); if(d2.unknown) applyFront(r2,best.atks,d2,(d2.pevs||[]).filter(v=>v.n>0&&v.val>0));
@@ -646,7 +727,7 @@ function calcBase(S){
   const BD=blk.forced?blk.dead:[];
   // 我方領導者的【DON!!×1】效果：照這回合的配法，領導者有沒有貼到 DON!!
   const needL=fxOf(S.me).some(f=>f.dpow&&f.dpow.needLdon);
-  const ldonMe=needL?!!(best&&best.atks[0]&&best.atks[0].don>0):null;
+  const ldonMe=needL?(S.me.ldonFixed||!!(best&&best.atks[0]&&best.atks[0].don>0)):null;
   let ldonHint=null;
   if(needL){
     S={...S,me:{...S.me,ldon:ldonMe}};
@@ -729,14 +810,18 @@ function calcBase(S){
       if(R.lethal) threats.me.push({name:r.name,cost:r.cost,p:r.p,atks:R.atks});
     }
   }
-  return {threats,trig,blk,svNo,ldonMe,ldonHint,lifeOpts,effects,johnOp,johnMe:sv.johnMe,best,A,myRushTxt,myBase,hasMyRush:hasMyRush>0,myRushCnt,myExtra,myRushCost,opBlockers,myBlockers,myHand,atkDef,
+  return {threats,trig,blk,svNo,ldonMe,ldonHint,atkFx,lifeOpts,effects,johnOp,johnMe:sv.johnMe,best,A,myRushTxt,myBase,hasMyRush:hasMyRush>0,myRushCnt,myExtra,myRushCost,opBlockers,myBlockers,myHand,atkDef,
           worst:sv.worst,base:sv.base,rushTxt:sv.rushTxt,opHasRush:sv.opHasRush,reserve,view:sv.view,viewA:sv.viewA,viewRush:sv.viewRush};
 }
 
 // 第二階段：解怪搜尋。每個攻擊者可以打領導者或一隻橫置角色；對手可以「保」或「不保」
 function koSearch(S,B,budget,progress){
   const t0=Date.now();
-  const targets=S.op.chars.map((c,i)=>({ci:i,p:c.p+((c.cid&&EFX[c.cid]&&EFX[c.cid].oppTurnPow)||0)})).filter(t=>S.op.chars[t.ci].rest);
+  const oa=statAdj(S.op,false);
+  const targets=S.op.chars.map((c,i)=>({ci:i,p:c.p+oa.ch[i]+((c.cid&&EFX[c.cid]&&EFX[c.cid].oppTurnPow)||0)})).filter(t=>S.op.chars[t.ci].rest);
+  // 攻擊時讓對手角色 −力量（金獅子、Kaido 領導者）：每回合 1 次，用在其中一個解怪目標
+  const debF=fxOf(S.me).find(f=>f.debuff&&(!f.debuff.needAtk||(f.ci!=null&&S.me.chars[f.ci]&&S.me.chars[f.ci].atk)));
+  const deb=debF&&(!debF.debuff.disc||B.myHand>=debF.debuff.disc)?{name:debF.name,val:debF.debuff.val,disc:debF.debuff.disc||0,don:debF.debuff.don||0}:null;
   if(!targets.length) return {none:true};
   const atks=sideAttackers(S.me,'我方').concat(B.myExtra);
   const don=Math.max(0,S.me.don-B.myRushCost);
@@ -745,9 +830,9 @@ function koSearch(S,B,budget,progress){
   const opHand=S.op.hand, opPlay=S.op.play==null?2:S.op.play;
   const faceMemo=new Map(), survMemo=new Map();
   const faceBest=(idxs,D)=>{const k=idxs.join(',')+'|'+D; if(!faceMemo.has(k)) faceMemo.set(k,analyze(idxs.map(i=>atks[i]),D,def)[0]); return faceMemo.get(k);};
-  const survFor=dead=>{const k=dead.slice().sort().join(','); if(!survMemo.has(k)) survMemo.set(k,survival(S,dead,B.myBlockers,B.myHand,0).worst); return survMemo.get(k);};
-  const branch=(cards,hits,sv)=>({cards,hits,oppNext:Math.max(0,opHand-cards+hits+1-opPlay),
-    iDie:!!sv.lethal,myNeed:sv.hand?sv.hand.cards:null,margin:sv.lethal?-1:B.myHand-(sv.hand?sv.hand.cards:0),myReq:sv.req});
+  const survFor=(dead,hd)=>{const H=hd==null?B.myHand:hd; const k=dead.slice().sort().join(',')+'|'+H; if(!survMemo.has(k)) survMemo.set(k,survival(S,dead,B.myBlockers,H,0).worst); return survMemo.get(k);};
+  const branch=(cards,hits,sv,hd)=>({cards,hits,oppNext:Math.max(0,opHand-cards+hits+1-opPlay),
+    iDie:!!sv.lethal,myNeed:sv.hand?sv.hand.cards:null,margin:sv.lethal?-1:(hd==null?B.myHand:hd)-(sv.hand?sv.hand.cards:0),myReq:sv.req});
   const all=atks.map((_,i)=>i);
   const fb0=faceBest(all,don);
   const baseline={assign:[],face:fb0.atks,lethal:fb0.lethal,ns:branch(fb0.minCards,fb0.minHits,survFor(B.blk&&B.blk.forced?B.blk.dead:[])),s:null,front:fb0.front};
@@ -755,17 +840,19 @@ function koSearch(S,B,budget,progress){
   // 列出所有指派：每隻橫置角色由最多一個攻擊者負責；相同的攻擊者只試一次
   const sig=a=>a.p+'|'+!!a.da+'|'+!!a.ub;
   const assigns=[];
-  (function rec(t,used,cur,dsum){
-    if(t===targets.length){ if(cur.length) assigns.push({list:cur.slice(),dsum}); return; }
-    rec(t+1,used,cur,dsum);
+  (function rec(t,used,cur,dsum,dg){
+    if(t===targets.length){ if(cur.length) assigns.push({list:cur.slice(),dsum,deb:dg}); return; }
+    rec(t+1,used,cur,dsum,dg);
     for(let i=0;i<atks.length;i++){
       if(used.has(i)) continue;
       if(atks.some((b,j)=>j<i&&!used.has(j)&&sig(b)===sig(atks[i]))) continue;
       const d=Math.max(0,Math.ceil((targets[t].p-atks[i].p)/1000));
-      if(dsum+d>don) continue;
-      used.add(i); cur.push({ai:i,ti:t,dmin:d}); rec(t+1,used,cur,dsum+d); cur.pop(); used.delete(i);
+      if(dsum+d+(dg?deb.don:0)<=don){ used.add(i); cur.push({ai:i,ti:t,dmin:d}); rec(t+1,used,cur,dsum+d,dg); cur.pop(); used.delete(i); }
+      // 這隻目標吃 −力量（每回合 1 次）
+      if(deb&&!dg){ const d2=Math.max(0,Math.ceil((Math.max(0,targets[t].p-deb.val)-atks[i].p)/1000));
+        if(d2<d&&dsum+d2+deb.don<=don){ used.add(i); cur.push({ai:i,ti:t,dmin:d2,deb:true}); rec(t+1,used,cur,dsum+d2,true); cur.pop(); used.delete(i); } }
     }
-  })(0,new Set(),[],0);
+  })(0,new Set(),[],0,false);
   assigns.sort((x,y)=>x.list.length-y.list.length||x.dsum-y.dsum);
 
   // 每個打角色的攻擊：剛好打得過，或多貼 1～2 張讓對手保它更貴
@@ -782,17 +869,19 @@ function koSearch(S,B,budget,progress){
     const {as,extra}=job;
     const assigned=new Set(as.list.map(x=>x.ai));
     const faceIdx=all.filter(i=>!assigned.has(i));
-    const used=as.list.reduce((s,x,j)=>s+x.dmin+extra[j],0);
+    const dbDon=as.deb?deb.don:0, hd=as.deb?Math.max(0,B.myHand-deb.disc):B.myHand;
+    const used=as.list.reduce((s,x,j)=>s+x.dmin+extra[j],0)+dbDon;
+    if(used>don) continue;
     const fb=faceBest(faceIdx,don-used);
-    const charAtks=as.list.map((x,j)=>{const a=atks[x.ai],t=targets[x.ti],d=x.dmin+extra[j];
-      return {name:a.name,p:a.p+d*1000,da:false,ub:a.ub,vs:t.p,must:true,don:d,ci:t.ci,tp:t.p};});
+    const charAtks=as.list.map((x,j)=>{const a=atks[x.ai],t=targets[x.ti],d=x.dmin+extra[j],tp=x.deb?Math.max(0,t.p-deb.val):t.p;
+      return {name:a.name,p:a.p+d*1000,da:false,ub:a.ub,vs:tp,must:true,don:d,ci:t.ci,tp,deb:x.deb?`${deb.name} −${deb.val/1000}k${deb.disc?'，丟'+deb.disc+'張':''}${deb.don?'，DON!!−'+deb.don:''}`:null};});
     const dead=as.list.map(x=>targets[x.ti].ci);
-    const ns=branch(fb.minCards,fb.minHits,survFor(dead));
+    const ns=branch(fb.minCards,fb.minHits,survFor(dead,hd),hd);
     // 保：角色那幾下一定要擋或反擊
     const fr=frontier(fb.atks.concat(charAtks),def,pevs);
     const ok=fr.filter(x=>!x.over);
     const sTop=ok.length?ok.reduce((x,y)=>y.n<x.n?y:x):null;
-    const s=sTop?branch(sTop.n,sTop.hits,survFor([])):null;
+    const s=sTop?branch(sTop.n,sTop.hits,survFor([],hd),hd):null;
     options.push({assign:charAtks,face:fb.atks,lethal:fb.lethal,ns,s});
     done++;
     if(progress&&Date.now()-lastPost>250){lastPost=Date.now();progress(Math.round(done/jobs.length*100));}
@@ -821,7 +910,7 @@ function calcAll(S,budget,post){
 
 </script>
 <script>
-const APP_VERSION='v27';
+const APP_VERSION='v31';
 const S = {
   me:{ leader:5000, lda:false, lub:false, life:2, hand:4, c2:1, c1:2, evs:[], rush:[], don:10, defDon:0, lk:[], lke:[],
        chars:[{p:5000,atk:true,blk:false,da:false,ub:false},{p:7000,atk:true,blk:false,da:false,ub:false},{p:7000,atk:true,blk:false,da:false,ub:false},{p:3000,atk:false,blk:true,da:false,ub:false}] },
@@ -938,6 +1027,9 @@ const META={"fmt":"OP17","n":345,"date":"2026-11-12","leaders":[{"id":"OP17-039"
 const META_BY={}; META.leaders.forEach(L=>META_BY[L.id]=L);
 // 少見但可能有：環境牌組不到 4 成有放的反擊事件、速攻、補血／效果卡（optcg.one 345 副，2026-11-12）
 const EFX_UI=(()=>{try{return new Function(document.getElementById('engine-src').textContent+';return EFX;')();}catch(e){return {};}})();
+const DON_IMG='https://optcgapi.com/media/static/Card_Images/DON_Card_-_One_Piece_Demo_Deck_Cards_OPDD_img.jpg';
+const needLdon=side=>{const f=EFX_UI[S[side].lid]; return !!(f&&(f.ldon||(f.dpow&&f.dpow.needLdon)));};
+const ldonOn=side=>needLdon(side)&&S[side].ldon!==false;
 const META_RARE={"OP17-039":"OP14-049:10","OP09-081":"OP09-097:11","OP13-001":"OP10-040:39,OP14-037:34,ST31-004:13,OP05-038:13,OP10-018:8,OP12-037:5,OP13-040:3","OP12-061":"EB03-062:20,EB05-040:10","OP08-058":"OP13-076:33,EB04-058:25,OP06-115:17,OP17-106:8","ST30-001":"OP12-038:10,OP06-017:5,ST01-012:5","OP05-098":"OP14-104:39,OP15-113:26,OP14-118:17,OP17-110:4","OP17-079":"OP17-096:22","OP16-079":"EB05-046:33","OP17-058":"EB04-030:25,OP02-089:25,OP13-076:15,OP17-077:5","OP17-020":"OP17-038:36,OP12-037:14","OP08-098":"OP14-118:25,OP17-104:25,OP17-103:25,OP17-112:25,OP15-078:25,OP17-076:25","OP13-004":"OP17-096:27,OP17-098:20,EB05-046:7","OP16-080":"OP17-114:33","OP14-041":"OP07-056:33","OP16-022":"ST30-012:25,OP12-037:25,OP12-038:25,EB02-030:25","OP09-062":"OP07-076:14,OP14-118:14","OP14-080":"EB05-049:25","OP10-003":"ST10-015:33,OP17-076:33,OP10-019:33","EB05-010":"OP17-112:33,EB04-058:17,OP12-037:17,OP13-040:17","OP09-042":"OP16-058:30"};
 function rareList(side){
   const d=S[side], raw=d.deck&&d.deck.meta&&META_RARE[d.lid]; if(!raw) return [];
@@ -1074,9 +1166,12 @@ function renderZone(side){
       ${cardTile(side,-1,true)}<span class="handcap">手牌 <b>${d.hand}</b> ${handSub}</span></button>`;
   const hp=(pos)=>`<button class="stat hp ${pos}" id="${side}-st-life" data-open="life" data-s="${side}"><span class="l">HP</span><span class="v">${d.life}</span><span class="s">${(()=>{const k=(d.lk||[]).slice(0,d.life).filter(v=>v==='e'||v>0);return k.length?'已知 '+k.map(v=>v==='e'?'事件':v/1000+'k').join(' '):'生命';})()}</span></button>`;
   const dn=(pos)=>`<button class="stat dn ${pos}" id="${side}-st-don" data-open="don" data-s="${side}"><span class="l">${me?'可貼DON!!':'剩餘DON!!'}</span><span class="v">${me?d.don:d.defDon}</span><span class="s">${me?'這回合':'下回合 '+d.nextDon}</span></button>`;
+  const on=ldonOn(side);
+  const tuck=needLdon(side)?`<button class="tuck${on?' on':''}" id="${side}-ldon" data-ldon="${side}" aria-pressed="${on}" aria-label="${me?'我方':'對手'}領導者下面${on?'貼了 1 張 DON!!，點一下拿掉':'沒有 DON!!，點一下貼 1 張'}">${on?`<img src="${DON_IMG}" alt="" onerror="this.remove()">`:''}<span>${on?'DON!!':'+DON'}</span></button>`:'';
+  const leadw=`<div class="leadw">${tuck}${lead}</div>`;
   $('zone-'+side).innerHTML=me
-    ?`<div class="chars">${slots.join('')}</div><div class="top">${dn('sl')+lead+hp('sr')}</div>`
-    :`<div class="top">${hp('sl')+lead+dn('sr')}</div><div class="chars">${slots.join('')}</div>`;
+    ?`<div class="chars">${slots.join('')}</div><div class="top">${dn('sl')+leadw+hp('sr')}</div>`
+    :`<div class="top">${hp('sl')+leadw+dn('sr')}</div><div class="chars">${slots.join('')}</div>`;
 }
 function renderBoard(){renderZone('op');renderZone('me');}
 function renderRush(){
@@ -1146,7 +1241,7 @@ function renderSheet(){
   if(type==='leader'){
     title=who+'領導者・手牌';
     body=metaPicker(side)+rareBox(side)+deckBox(side)+leaderPicker(side)+stepper(`${side}.leader`,'領導者力量',1000,0,20000)+
-      `<div class="st"><span class="stl">能力</span><span class="icos">${ico(`${side}.lda`,'da')}${ico(`${side}.lub`,'ub')}</span></div>${side==='op'&&EFX_UI[d.lid]&&EFX_UI[d.lid].dpow&&EFX_UI[d.lid].dpow.needLdon?`${d.ldon==null?(d.ldon=true,''):''}<div class="sws">${sw('op.ldon','領導者身上有 DON!!（效果要【DON!!×1】）')}</div>`:''}<div class="sh-t">手牌</div>`+handBody();
+      `<div class="st"><span class="stl">能力</span><span class="icos">${ico(`${side}.lda`,'da')}${ico(`${side}.lub`,'ub')}</span></div><div class="sh-t">手牌</div>`+handBody();
   }else if(type==='card'){
     title=`${who}角色${i+1}`; const p=`${side}.chars.${i}`;
     body=charPicker(side,i)+stepper(`${p}.p`,'力量',1000,0,20000)+
@@ -1169,7 +1264,7 @@ function renderSheet(){
   }else if(type==='don'){
     title=who+'DON!!';
     body=me?stepper('me.don','這回合可用DON!!',1,0,10)+'<p class="note">貼出去或拿去下速攻的 DON!!，在對手回合不能付反擊事件。如果需要留 DON!! 給反擊事件，結果區會提示。</p>'
-           :stepper('op.defDon','現在剩餘DON!!（付反擊事件）',1,0,10)+stepper('op.nextDon','下回合可貼DON!!',1,0,10)+stepper('op.play','下回合預估打出幾張牌',1,0,10)+'<p class="note">「打出幾張」只用來估計對手進入你下一次攻擊時還剩幾張手牌。</p>';
+           :stepper('op.defDon','現在剩餘DON!!（付反擊事件）',1,0,ldonOn('op')?9:10)+(ldonOn('op')?'<p class="note">領導者下面貼了 1 張 DON!!，剩餘最多 9 張。</p>':'')+stepper('op.nextDon','下回合可貼DON!!',1,0,10)+stepper('op.play','下回合預估打出幾張牌',1,0,10)+'<p class="note">「打出幾張」只用來估計對手進入你下一次攻擊時還剩幾張手牌。</p>';
   }
   const keep=document.activeElement&&document.activeElement.id;
   $('sheet-in').innerHTML=`<div class="sh-head"><h2 id="sh-title">${title}</h2><button class="done" id="sh-done" data-close="1">完成</button></div>${body}`;
@@ -1202,6 +1297,7 @@ document.addEventListener('click',e=>{
   if(t.dataset.addchar){const s=t.dataset.addchar;S[s].chars.push({p:5000,atk:s==='me',blk:false,da:false,ub:false});changed();
     openSheet('card',s,S[s].chars.length-1,$(`${s}-card${S[s].chars.length-1}`));return;}
   if(t.dataset.step){const v=clamp((+getP(t.dataset.step)||0)+(+t.dataset.d),+t.dataset.min,+t.dataset.max);setP(t.dataset.step,v);changed(true);return;}
+  if(t.dataset.ldon){const sd=t.dataset.ldon,d=S[sd]; d.ldon=!ldonOn(sd); if(sd==='op'&&d.ldon&&d.defDon>9) d.defDon=9; changed(true); const b=$(sd+'-ldon'); if(b)b.focus(); return;}
   if(t.dataset.sw){setP(t.dataset.sw,!getP(t.dataset.sw));t.setAttribute('aria-pressed',!!getP(t.dataset.sw));changed(true);return;}
   if(t.dataset.delchar!==undefined){const sd=sheet.side;S[sd].chars.splice(+t.dataset.delchar,1);opener=null;closeSheet();changed();const a=$(`${sd}-add`);if(a)a.focus();return;}
   if(t.dataset.lk){const [sd,q]=t.dataset.lk.split('.');S[sd].lk[+q]=t.dataset.v==='e'?'e':+t.dataset.v;changed(true);return;}
@@ -1234,7 +1330,7 @@ function actPill(a,r,plan){
   if(plan.blocked.has(a.idx)) return '<span class="pill p-blk">阻擋者擋</span>';
   const j=plan.cnt.findIndex(x=>x.i===a.idx);
   if(j>=0){
-    if(plan.picks){const p=plan.picks[j];const parts=[];if(p.t)parts.push('2000×'+p.t);if(p.o)parts.push('1000×'+p.o);p.ev.forEach((n,q)=>{if(n)parts.push(evLabel(plan.evs[q])+'×'+n);});return `<span class="pill p-cnt">反擊 ${parts.join('+')}</span>`;}
+    if(plan.picks){const p=plan.picks[j];const parts=[];if(p.t)parts.push('2000×'+p.t);if(p.o)parts.push('1000×'+p.o);p.ev.forEach((n,q)=>{if(!n)return;const v=plan.evs[q];parts.push(v.fx?`${v.name.replace(/ 領導者$/,'')}效果${v.cost?` 橫置 ${n*v.cost} DON!!`:''}${v.disc?` 丟 ${n*v.disc} 張`:''}（+${fmt(n*v.val)}）`:evLabel(v)+'×'+n);});return `<span class="pill p-cnt">反擊 ${parts.join('+')}</span>`;}
     const nd=plan.cnt[j].need, t=Math.floor(nd/2000), o=Math.ceil((nd-t*2000)/1000);
     return `<span class="pill p-cnt" title="要 +${fmt(nd)}">至少 ${[t?'2000×'+t:'',o?'1000×'+o:''].filter(Boolean).join(' + ')}</span>`;
   }
@@ -1289,7 +1385,7 @@ function comboHTML(fr,hand,evs){
   const shown=fr.slice(0,10), d=S.op, kn=d.c2+d.c1+d.evs.reduce((a,v)=>a+v.n,0);
   const knTxt=[d.c2?'2000×'+d.c2:'',d.c1?'1000×'+d.c1:''].concat(d.evs.filter(v=>v.n>0).map(v=>evLabel(v)+'×'+v.n)).filter(Boolean).join(' + ');
   return `<div class="grp-t">${kn?`除了已知的 ${knTxt}，未知的 ${Math.max(0,d.hand-kn)} 張牌還要有以下任一組合才擋得住`:'對手手上要有以下任一組合才擋得住'}</div><div class="combos">${shown.map(x=>{
-    const notes=[x.cnt?x.n+' 張未知牌':'已知的牌就夠'];
+    const notes=[x.cnt?x.n+' 張未知牌':(lastBest&&S.op.lid&&EFX_UI[S.op.lid]&&EFX_UI[S.op.lid].dpow||(S.op.chars||[]).some(c=>c.cid&&EFX_UI[c.cid]&&EFX_UI[c.cid].dpow)?'已知的牌和場上效果就夠':'已知的牌就夠')];
     if(x.hits) notes.push(`吃${x.hits}血，生命卡已算入`);
     if(x.dd) notes.push(`已知事件或場上效果要棄${x.dd}張`);
     if(x.nodeck) notes.push('牌組裡沒有這麼多');
@@ -1311,7 +1407,12 @@ function compute(){
   const id=++jobId; lastSnap=JSON.parse(JSON.stringify(S));
   // 我方已橫置（這回合攻擊過）：不能再攻擊，對手回合也不能阻擋
   lastSnap.me.chars=lastSnap.me.chars.map(c=>c.rest?{...c,atk:false,blk:false}:c);
+  for(const sd of ['me','op']) lastSnap[sd].chars=lastSnap[sd].chars.map(c=>{const m=c.cid&&META_CHARS[c.cid]; return m?{...c,cost:m.cost,name:m.name,bp:m.p}:c;});
   rareApply(lastSnap,'me'); rareApply(lastSnap,'op');
+  // 領導者【DON!!×1】：我方固定貼 1 張在領導者（這回合 +1000，可貼的少 1 張）；對手剩餘 DON!! 最多 9
+  if(ldonOn('me')){lastSnap.me.leader+=1000; lastSnap.me.don=Math.max(0,lastSnap.me.don-1); lastSnap.me.ldon=true; lastSnap.me.ldonFixed=true;}
+  else if(needLdon('me')) lastSnap.me.ldon=undefined;
+  if(ldonOn('op')){lastSnap.op.ldon=true; lastSnap.op.defDon=Math.min(lastSnap.op.defDon,9);} else if(needLdon('op')) lastSnap.op.ldon=false;
   const st=$('calcState'); if(st) st.textContent='計算中…';
   if(!worker||busy){ if(worker&&busy){try{worker.terminate();}catch(_){} } worker=makeWorker(); }
   if(worker){ busy=true; worker.postMessage({id,S:lastSnap,budget:3000}); }
@@ -1390,6 +1491,9 @@ function threatHTML(B){
   const TG=B.trig||{};
   if(TG.op) h+=`<div class="banner b-warn"><div class="k">觸發補血風險（對手牌組）</div><p>對手牌組有 ${TG.op.k} 張補血觸發（${TG.op.name}）。最後一張生命剛好是它的機率約 <b>${Math.round(TG.op.p*100)}%</b>：${TG.op.saves?`翻到就<b>擋得住</b>（補 1 血後最省要 ${TG.op.cards} 張）。`:'就算翻到也還是擋不住。'}</p></div>`;
   if(TG.me) h+=`<div class="banner ${TG.me.saves?'b-good':'b-bad'}"><div class="k">觸發補血（你的牌組）</div><p>你牌組有 ${TG.me.k} 張補血觸發（${TG.me.name}）。最後一張生命剛好是它的機率約 <b>${Math.round(TG.me.p*100)}%</b>：${TG.me.saves?'翻到就守得住。':'就算翻到也守不住。'}</p></div>`;
+  const AF=B.atkFx;
+  if(AF&&AF.used) h+=`<div class="banner b-good"><div class="k">用 ${AF.name} 效果斬殺</div><p>領導者攻擊時丟 ${AF.disc} 張手牌、+${AF.p/1000}000，這樣就打得死。你的手牌會少 ${AF.disc} 張（下回合存活已經算進去）。</p></div>`;
+  else if(AF&&!AF.lethal&&AF.minCards>AF.base) h+=`<p class="hint">${AF.name}：領導者攻擊時丟 ${AF.disc} 張 +${AF.p/1000}000 的話，對手要 ${AF.minCards} 張才擋得住（不用是 ${AF.base} 張），但打不死，而且你下回合少 ${AF.disc} 張手牌。上面的結論沒有用這個效果。</p>`;
   if(B.ldonMe===false) h+=`<div class="banner ${B.ldonHint?'b-bad':'b-warn'}"><div class="k">領導者效果要貼 DON!!</div><p>你的領導者效果要【DON!!×1】，但這個配法沒有貼 DON!! 到領導者，對手回合不能用。${B.ldonHint?`<b>領導者貼 1 張${B.ldonHint.r?`、再留 ${B.ldonHint.r} 張 DON!! 不貼`:''}，你下回合就守得住</b>（用 ${B.ldonHint.need} 張）。代價：這回合對手${B.ldonHint.lethal?'還是擋不住':`只要 ${B.ldonHint.minCards} 張就擋得住`}。`:'下回合存活已經照「不能用」計算。'}</p></div>`;
   else if(B.ldonMe===true) h+=`<p class="hint">這個配法有貼 DON!! 到領導者，對手回合可以用領導者效果（要活躍 DON!! 5 張以下）。</p>`;
   const RL=rareList('op').filter(r=>r.kind!=='fx'), RO=S.op.rareOn||[];
@@ -1417,7 +1521,7 @@ function koCell(m){
   if(!m) return '<span class="kobad">保不住（牌不夠）</span>';
   return `<b>丟 ${m.cards} 張</b>・下次剩約 ${m.oppNext} 張<br><span class="${m.iDie?'kobad':'kogood'}">你下回合${m.iDie?'守不住':`守得住（用 ${m.myNeed} 張）`}</span>`;
 }
-function koMain(o){return o.assign.length?o.assign.map(c=>`${short(c.name)} +${c.don} 打 對手角色${c.ci+1}（${c.tp}）`).join('、'):'不解怪，全部打臉';}
+function koMain(o){return o.assign.length?o.assign.map(c=>`${short(c.name)} +${c.don} 打 對手角色${c.ci+1}（${c.tp}${c.deb?'，'+c.deb:''}）`).join('、'):'不解怪，全部打臉';}
 function koDesc(o){
   const face=o.face.map(a=>`${short(a.name)}+${a.don}`).join(' ');
   return `${koMain(o)}${face?`<br><small>打臉：${face}</small>`:''}`;
