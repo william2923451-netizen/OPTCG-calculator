@@ -74,6 +74,8 @@ button{font-family:var(--f-body);cursor:pointer;color:inherit}
 .card .don{position:absolute;top:-9px;left:50%;transform:translateX(-50%);white-space:nowrap;background:var(--don);color:var(--don-ink);font-family:var(--f-num);font-size:11px;font-weight:700;border-radius:999px;padding:0 6px;line-height:18px}
 .cardw{position:relative;min-width:0}
 .cardw>.card{width:100%;box-sizing:border-box}
+.reset{margin:8px 0 0 8px;font-size:13px;padding:6px 12px;vertical-align:top}
+#saveTag{margin-left:8px;font-size:12px}
 .rare{display:flex;flex-direction:column;gap:6px}
 .rpick{display:grid;grid-template-columns:44px 1fr auto;align-items:center;gap:8px;text-align:left;border:1px solid var(--line);background:var(--bg);color:var(--ink);border-radius:8px;padding:8px 10px;font-size:14px}
 .rpick .rp{font-family:var(--f-num);font-weight:700;color:var(--muted)}
@@ -239,6 +241,8 @@ details ul{margin:8px 0 0;padding-left:20px;color:var(--muted)}
       <button id="mode-simple" data-mode="simple" aria-pressed="true">簡單</button>
       <button id="mode-detail" data-mode="detail" aria-pressed="false">詳細</button>
     </div>
+    <button class="ghost reset" id="resetBoard" data-reset="1">重設盤面</button>
+    <span class="hint" id="saveTag" hidden>已記住上次的盤面</span>
   </header>
 
   <div class="table" id="table">
@@ -275,6 +279,7 @@ details ul{margin:8px 0 0;padding-left:20px;color:var(--muted)}
       <li>我方「已橫置」（v24）：代表這回合已經攻擊過，不再參與這回合攻擊，對手回合也不能阻擋。用來在解怪後調整剩下的攻擊。</li>
       <li>阻擋者會死（v25）：你的攻擊力 ≥ 對手阻擋者力量時，阻擋者被 KO。對手會先用擋了不會死、或下回合本來就不攻擊的阻擋者。只有「不擋就守不住」時才當成他一定會擋，下回合少那隻攻擊者；否則照他不擋（對你最不利）算，另外列出擋了的結果。解怪比較裡的各種打法沒有算阻擋者死亡。</li>
       <li>我方角色左上的「橫」：設成已橫置（攻擊或解怪用過了），不會再攻擊，下回合也不能阻擋。打完一部分後把用過的角色按「橫」、把被解掉的對手角色移除，就能重算剩下怎麼打。</li>
+      <li>記住盤面（v32）：盤面、手牌、牌組設定會存在這台裝置的瀏覽器，重新整理或關掉再開都會還原。按標題下的「重設盤面」回到範例盤面。換裝置或無痕視窗不會帶過去。</li>
       <li>常駐加力與減力（v31）：Sabo 領導者（OP13-004）生命 4 以上 −1000；領導者有 DON!!（點領導者旁的 DON!! 卡）且場上有 8 費以上角色時，領導者和全部角色 +1000，雙方攻擊、防守都算。Luffy & Ace 領導者（ST30-001）有 7000 以上角色時 −2000；對手回合名字是 Luffy／Ace 的角色 +3000（影響解怪）。金獅子（要有攻擊，丟 1 張）和 Kaido 領導者（DON!!−1）攻擊時讓對手 1 隻角色 −3000／−2000，解怪比較會試著用在其中一個目標。角色費用和名字只認從環境牌組選的角色。</li>
       <li>攻擊加力（v29）：Rocks 白鬍子（OP17-040）領導者攻擊時丟 1 張 +3000。你方：用了能斬殺才用（手牌少 1 張），不然只列出差別；對手方：下回合打你時一律當成會用。Moria 領導者「KO 自己 1 隻角色，全部 +1000」也算在對手下回合（取對你最不利的）。</li>
       <li>領導者下面的 DON!!（v28）：紅綠魯夫這類【DON!!×1】領導者，卡片旁會出現 DON!! 卡，點一下切換有沒有貼。我方有貼：固定 1 張在領導者（這回合 +1000，可貼的 DON!! 少 1 張），對手回合可以用效果；對手有貼：剩餘 DON!! 最多 9 張。DON!! 卡圖在 GitHub 版才會顯示。</li>
@@ -910,7 +915,7 @@ function calcAll(S,budget,post){
 
 </script>
 <script>
-const APP_VERSION='v31';
+const APP_VERSION='v32';
 const S = {
   me:{ leader:5000, lda:false, lub:false, life:2, hand:4, c2:1, c1:2, evs:[], rush:[], don:10, defDon:0, lk:[], lke:[],
        chars:[{p:5000,atk:true,blk:false,da:false,ub:false},{p:7000,atk:true,blk:false,da:false,ub:false},{p:7000,atk:true,blk:false,da:false,ub:false},{p:3000,atk:false,blk:true,da:false,ub:false}] },
@@ -1283,6 +1288,7 @@ document.addEventListener('click',e=>{
   const t=e.target.closest('button,[data-close]')||e.target;
   if(t.id==='scrim'||t.dataset.close){closeSheet();return;}
   if(t.dataset.reload){location.reload();return;}
+  if(t.dataset.reset){try{localStorage.removeItem(SAVE_KEY);}catch(_){} location.reload();return;}
   if(t.dataset.mode){setMode(t.dataset.mode);return;}
   if(t.dataset.cpick){pickChar(t.dataset.s,+t.dataset.i,t.dataset.cpick);changed(true);return;}
   if(t.dataset.meta){applyMeta(t.dataset.s,t.dataset.meta);renderRush();changed(true);return;}
@@ -1402,7 +1408,20 @@ function handHint(side){
   else {el.className='hint';el.textContent=`手牌 ${d.hand} 張：反擊牌 ${used} 張，其餘 ${d.hand-used} 張當作沒有反擊值。`;}
 }
 
+// 記住盤面：每次重算時存到這台瀏覽器，重新整理後還原；「重設盤面」清掉
+const SAVE_KEY='optcg-state';
+function saveState(){try{localStorage.setItem(SAVE_KEY,JSON.stringify({v:1,S,deckText,touched}));}catch(_){}}
+function loadState(){
+  try{const raw=localStorage.getItem(SAVE_KEY); if(!raw) return false; const o=JSON.parse(raw); if(!o||o.v!==1||!o.S) return false;
+    for(const sd of ['me','op']) if(o.S[sd]) S[sd]={...S[sd],...o.S[sd]};
+    for(const k in o.S) if(k!=='me'&&k!=='op') S[k]=o.S[k];
+    if(o.deckText) deckText={...deckText,...o.deckText};
+    if(o.touched){touched=true;const x=$('exTag');if(x)x.hidden=true;}
+    const tg=$('saveTag'); if(tg) tg.hidden=false;
+    return true;}catch(_){return false;}
+}
 function compute(){
+  saveState();
   handHint('me');handHint('op');
   const id=++jobId; lastSnap=JSON.parse(JSON.stringify(S));
   // 我方已橫置（這回合攻擊過）：不能再攻擊，對手回合也不能阻擋
@@ -1564,7 +1583,7 @@ function setMode(m){
   try{localStorage.setItem('optcg-mode',m);}catch(_){}
 }
 (function(){let m='simple';try{m=localStorage.getItem('optcg-mode')||'simple';}catch(_){} setMode(m==='detail'?'detail':'simple');})();
-renderBoard(); renderRush(); compute(); checkUpdate();
+loadState(); renderBoard(); renderRush(); compute(); checkUpdate();
 </script>
 
 </body>
