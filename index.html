@@ -929,7 +929,7 @@ function calcAll(S,budget,post){
 
 </script>
 <script>
-const APP_VERSION='v36';
+const APP_VERSION='v37';
 const S = {
   me:{ leader:5000, lda:false, lub:false, life:2, hand:4, c2:1, c1:2, evs:[], rush:[], don:10, defDon:0, lk:[], lke:[],
        chars:[{p:5000,atk:true,blk:false,da:false,ub:false},{p:7000,atk:true,blk:false,da:false,ub:false},{p:7000,atk:true,blk:false,da:false,ub:false},{p:3000,atk:false,blk:true,da:false,ub:false}] },
@@ -1139,13 +1139,13 @@ const META_CHARS={}, META_EVS={}, META_LDS={};
 "EB03-001|Nefeltari Vivi|5|4;EB04-001|Jewelry Bonney|5|4;EB05-010|Nico Robin|5|4;OP01-002|Trafalgar Law|5|4;OP05-060|Monkey.D.Luffy|5|5;OP05-098|Enel|5|4;OP06-021|Perona|5|4;OP07-019|Jewelry Bonney|5|5;OP07-059|Foxy|5|5;OP08-058|Charlotte Pudding|5|4;OP08-098|Kalgara|5|5;OP09-001|Shanks|5|5;OP09-042|Buggy|5|5;OP09-061|Monkey.D.Luffy|5|4;OP09-062|Nico Robin|5|4;OP09-081|Marshall.D.Teach|5|5;OP10-003|Sugar|5|4;OP11-001|Koby|5|4;OP11-022|Shirahoshi|5|5;OP11-040|Monkey.D.Luffy|6|3;OP11-041|Nami|5|4;OP12-061|Donquixote Rosinante|5|4;OP12-081|Koala|5|4;OP13-001|Monkey.D.Luffy|5|4;OP13-002|Portgas.D.Ace|6|3;OP13-004|Sabo|5|5;OP13-079|Imu|5|4;OP14-001|Trafalgar Law|5|5;OP14-020|Dracule Mihawk|5|5;OP14-041|Boa Hancock|5|4;OP14-080|Gecko Moria|5|4;OP15-058|Enel|5|5;OP16-001|Portgas.D.Ace|5|5;OP16-022|Monkey.D.Luffy|5|4;OP16-079|Yamato|5|5;OP16-080|Marshall.D.Teach|5|4;OP17-020|Shanks|5|5;OP17-039|Rocks.D.Xebec|5|5;OP17-058|Kaido|5|5;OP17-079|Monkey.D.Luffy|5|5;OP17-099|Charlotte Linlin|5|5;ST13-001|Sabo|5|4;ST29-001|Monkey.D.Luffy|5|6;ST30-001|Luffy & Ace|6|4".split(';').forEach(r=>{const a=r.split('|'); if(a.length<4) return; META_LDS[a[0]]={id:a[0],name:a[1],power:+a[2]*1000,life:+a[3]};});
 function deckChars(side){
   const d=S[side];
-  if(d.dlist) return Object.entries(d.dlist).map(([id,n])=>{const c=cardOf(id);return c&&c.type==='char'?{...c,n}:null;}).filter(Boolean).sort((a,b)=>a.cost-b.cost||a.p-b.p);
+  if(d.dlist) return Object.entries(d.dlist).map(([id,n])=>{const c=cardOf(id);return c&&c.type==='char'?{...c,n}:null;}).filter(Boolean).sort((a,b)=>b.p-a.p||a.cost-b.cost);
   const L=META_BY[d.lid]; if(!L) return [];
   // 新資料：這個領導者的牌組出現過的全部角色，照比例排
   if(L.all) return L.all.split(',').map(t=>{const [id,pct]=t.split(':');return META_CHARS[id]?{...META_CHARS[id],pct:+pct}:null;}).filter(Boolean)
-    .sort((a,b)=>b.pct-a.pct||a.cost-b.cost||a.p-b.p);
+    .sort((a,b)=>b.p-a.p||b.pct-a.pct||a.cost-b.cost);
   return L.list.split(' ').map(t=>{const m=t.match(/^(\d+)x(.+)$/);return m&&META_CHARS[m[2]]?{...META_CHARS[m[2]],n:+m[1]}:null;}).filter(Boolean)
-    .sort((a,b)=>a.cost-b.cost||a.p-b.p);
+    .sort((a,b)=>b.p-a.p||a.cost-b.cost);
 }
 function charPicker(side,i){
   const list=deckChars(side), c=S[side].chars[i];
@@ -1153,7 +1153,7 @@ function charPicker(side,i){
   return `<div class="sh-t">從牌組選角色（${S[side].deck?S[side].deck.name:''}）</div>
     <div class="mres">${list.map(x=>`<button class="mpick${c.cid===x.id?' on':''}" id="${side}-cp${i}-${x.id}" data-cpick="${x.id}" data-s="${side}" data-i="${i}" aria-pressed="${c.cid===x.id}" aria-label="${x.name} ${x.p}">
       ${cardFace({name:x.name,color:'',img:imgFor(x.id)})}<small>${x.cost}C ${x.p}${x.pct!=null?` <b>${x.pct}%</b>`:''}<br>${[x.blk?'擋':'',x.da?'雙':'',x.ub?'穿':'',x.rush?'速':''].filter(Boolean).join('')||'&nbsp;'}</small></button>`).join('')}</div>
-    ${list.some(x=>x.pct!=null)?'<p class="note">列出這個領導者的比賽牌組出現過的全部角色，百分比＝有放這張的牌組比例。</p>':''}
+    ${list.some(x=>x.pct!=null)?'<p class="note">列出這個領導者的比賽牌組出現過的全部角色，照力量由高到低排；百分比＝有放這張的牌組比例。</p>':''}
     <p class="note">選了會帶入力量和關鍵字；DON!! 或效果加的力量請再手動調。</p>`;
 }
 function pickChar(side,i,id){
