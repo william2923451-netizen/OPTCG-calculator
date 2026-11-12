@@ -81,6 +81,17 @@ button{font-family:var(--f-body);cursor:pointer;color:inherit}
 .cardw>.card{width:100%;box-sizing:border-box}
 .reset{margin:8px 0 0 8px;font-size:13px;padding:6px 12px;vertical-align:top}
 #saveTag,#dataTag{margin-left:8px;font-size:12px}
+.evc,.evp{position:relative;overflow:hidden;border:1px solid var(--line);border-radius:8px;background:var(--bg)}
+.evc{display:flex;align-items:center;justify-content:space-between;gap:8px;padding:8px 10px}
+.evc .bg,.evp .bg,.rpick .bg{position:absolute;inset:0;background-size:cover;background-position:center 30%;opacity:.16;pointer-events:none}
+.evm,.evn,.evp b,.evp small,.rpick>span:not(.bg){position:relative}
+.evm{min-width:0}.evm b{display:block;font-size:14px}.evm small{color:var(--muted);font-size:12px}
+.evn{display:flex;align-items:center;gap:6px;flex:none}.evn button{width:36px;height:36px;padding:0;font-size:18px}.evn b{min-width:18px;text-align:center;font-family:var(--f-num)}
+.evpick{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:6px}
+.evp{text-align:left;padding:8px;color:var(--ink);display:flex;flex-direction:column;gap:2px;min-height:54px}
+.evp b{font-size:13px;line-height:1.25}.evp small{color:var(--muted);font-size:12px}
+.manual summary{font-size:13px;color:var(--muted);cursor:pointer;margin-top:6px}
+.rpick{position:relative;overflow:hidden}
 .rare{display:flex;flex-direction:column;gap:6px}
 .rpick{display:grid;grid-template-columns:44px 1fr auto;align-items:center;gap:8px;text-align:left;border:1px solid var(--line);background:var(--bg);color:var(--ink);border-radius:8px;padding:8px 10px;font-size:14px}
 .rpick .rp{font-family:var(--f-num);font-weight:700;color:var(--muted)}
@@ -278,7 +289,7 @@ details ul{margin:8px 0 0;padding-left:20px;color:var(--muted)}
       <li>解怪：只能攻擊橫置的角色。對手兩種應對都會算：讓角色死，或丟牌保它（只算全保或全不保）。推薦取對你比較差的那個結果。KO 時的效果、被擋時阻擋者會不會死，都沒有算。</li>
       <li>DON!!：這回合貼出去或拿去下速攻的 DON!!，對手回合不能付反擊事件；需要留的時候結果區會提示。</li>
       <li>點領導者可設定領導者力量和手牌；HP、DON!! 在領導者兩側。</li>
-      <li>反擊事件格式：費用C / +力量 / 張數 / 棄幾張手牌。「棄手牌的刀」要額外丟掉手牌，丟掉的牌也算進張數。</li>
+      <li>反擊事件（v39）：選了牌組後直接點事件加入，不用手動打數字；每張事件照卡文核對過：棄手牌是代價才算張數（Charlestone 的丟牌是選擇性的，不算），讓攻擊者 −力量的效果合併算進數值（Ten-Layer Igloo 算 +5000），用完會回到手上的牌（Gum-Gum Giant 抽 2、Slave Arrow 收回角色）會從耗用張數扣掉，只能加在角色的（覇王色）不列入。條件（墓地張數、領導者類型）列在事件下面，計算時當成條件成立。</li>
       <li>卡片上「攻」= 會攻擊、「擋」= 阻擋者、「雙」= 雙重攻擊、劃紅線的「擋」= 不可被阻擋；虛線框 = 不攻擊。圖示灰色 = 沒有這個能力，點一下切換。</li>
       <li>卡片效果（v22）：認得環境牌組裡的部分戰鬥效果。防守加力（紅綠魯夫領導者每橫置 1 DON!! +2000、Kaido 領導者、白鬍子、琳琳、金獅子、Yamato 等）當成不佔手牌的反擊；只能對角色用、只加在領導者的條件都當成任何攻擊都能用。Enel 領導者算多 1 血。補血卡只在你下回合守不住時檢查，且假設你手上有那張卡、條件成立。Captain John 鎖定、Shanks 登場橫置、Cabaji／Koby 對手回合加力也有算。其他效果沒算。</li>
       <li>觸發補血（v24）：只有「生命 0 時補 1 血」這種觸發會被算（目前環境只有 OP06-115）。用牌組裡的張數÷牌組張數估「最後一張生命是它」的機率；HP 設定裡最後一張生命已知時不算。翻到後重算一次：補 1 血、丟 1 張手牌、那張觸發不進手牌。黃色角色的【觸發】登場效果大多寫【自己的回合】，在對手回合翻到不會補血，所以不算。其他觸發（KO、橫置、登場阻擋者）沒有算。</li>
@@ -418,7 +429,7 @@ function solveCards(needs,def,hits){
       }
       for(let e=0;e<=ae[j];e++){
         if(cost+e*evs[j].cost>d) break;
-        use[j]=e; pick(j+1,power+e*evs[j].val,cost+e*evs[j].cost,cnt+e*((evs[j].nocard?0:1)+(evs[j].disc||0)));
+        use[j]=e; pick(j+1,power+e*evs[j].val,cost+e*evs[j].cost,cnt+e*Math.max(0,(evs[j].nocard?0:1)+(evs[j].disc||0)-(evs[j].gain||0)));
         if(power+e*evs[j].val>=c) break;
       }
       use[j]=0;
@@ -531,7 +542,7 @@ function frontier(atks,def,evs){
   const known=def.c2+def.c1+kE.filter(v=>!v.nocard).reduce((s,v)=>s+v.n,0);
   out.forEach(x=>{
     x.cnt=x.a+x.b+x.u.reduce((s,v)=>s+v,0);
-    x.n=x.cnt+x.u.reduce((s,v,q)=>s+v*(evs[q].disc||0),0)+x.dd;
+    x.n=Math.max(0,x.cnt+x.u.reduce((s,v,q)=>s+v*((evs[q].disc||0)-(evs[q].gain||0)),0)+x.dd);
     const lg=lifeGain(def,x.hits);
     const unknownCards=Math.max(0,def.hand-known);       // 手上未知的牌
     const fodder=x.hits-lg.cred;                         // 沒當反擊用、可以拿來棄的生命卡
@@ -929,7 +940,7 @@ function calcAll(S,budget,post){
 
 </script>
 <script>
-const APP_VERSION='v37';
+const APP_VERSION='v39';
 const S = {
   me:{ leader:5000, lda:false, lub:false, life:2, hand:4, c2:1, c1:2, evs:[], rush:[], don:10, defDon:0, lk:[], lke:[],
        chars:[{p:5000,atk:true,blk:false,da:false,ub:false},{p:7000,atk:true,blk:false,da:false,ub:false},{p:7000,atk:true,blk:false,da:false,ub:false},{p:3000,atk:false,blk:true,da:false,ub:false}] },
@@ -1018,7 +1029,7 @@ function applyDeck(side){
     total+=n; if(!c){miss.push(id);continue;}
     if(c.type==='char'){ if(c.counter===2000) c2+=n; else if(c.counter===1000) c1+=n;
       if(c.rush) rush.push({id,name:c.name,n:Math.min(4,n),p:c.p,cost:c.cost,da:c.da,ub:c.ub}); }
-    if(c.type==='ev'&&c.val) evs.push({name:c.name,n:Math.min(4,n),val:c.val,cost:c.cost,disc:c.disc});
+    if(c.type==='ev'&&c.val) evs.push({id,name:c.name,n:Math.min(4,n),val:c.val,cost:c.cost,disc:c.disc||0,gain:c.gain||0,note:c.note||''});
   }
   const d=S[side];
   d.deck={c2,c1,total,name:leaderId?(cardOf(leaderId)||{}).name||leaderId:'匯入的牌組',meta:false};
@@ -1069,6 +1080,7 @@ function applyLiveData(D){
   for(const k in META_BY) delete META_BY[k]; META.leaders.forEach(L=>META_BY[L.id]=L);
   for(const id in D.ch){const a=D.ch[id]; META_CHARS[id]={id,name:a[0],p:a[1]*1000,cost:a[2],counter:a[3]*1000,blk:a[4].includes('b'),da:a[4].includes('d'),rush:a[4].includes('r'),ub:a[4].includes('u')};}
   for(const id in D.ev){const a=D.ev[id]; META_EVS[id]={id,name:a[0],cost:a[1],val:a[2]*1000,disc:a[3]};}
+  fixEvs();
   for(const id in D.ld){const a=D.ld[id]; META_LDS[id]={id,name:a[0],power:a[1]*1000,life:a[2]};}
   for(const k in META_RARE) delete META_RARE[k]; Object.assign(META_RARE,D.rare||{});
   liveData=D; return true;
@@ -1089,7 +1101,7 @@ function rareApply(snap,side){   // 勾選「算進去」的少見卡，加進�
 function rareBox(side){
   const L=rareList(side); if(!L.length) return '';
   const on=S[side].rareOn||[];
-  return `<div class="sh-t">少見但可能有（不到 4 成牌組有放）</div><div class="rare">${L.map(r=>`<button class="rpick${on.includes(r.id)?' on':''}" id="${side}-rare-${r.id}" data-rare="${r.id}" data-s="${side}" aria-pressed="${on.includes(r.id)}"${r.kind==='fx'?' disabled':''}>
+  return `<div class="sh-t">少見但可能有（不到 4 成牌組有放）</div><div class="rare">${L.map(r=>`<button class="rpick${on.includes(r.id)?' on':''}" id="${side}-rare-${r.id}" data-rare="${r.id}" data-s="${side}" aria-pressed="${on.includes(r.id)}"${r.kind==='fx'?' disabled':''}><span class="bg" style="background-image:url('${imgFor(r.id)}')"></span>
     <span class="rp">${r.pct}%</span><span class="rn">${r.name}<small>${r.label}</small></span><span class="rt">${r.kind==='fx'?'上場再選角色':on.includes(r.id)?'已算進去':'算進去'}</span></button>`).join('')}</div>
     <p class="note">百分比＝這個領導者的比賽牌組裡有放這張的比例。按「算進去」：反擊事件當成未知手牌可能有 1 張、速攻當成可能下 1 張、補血觸發當成牌組有 2 張。</p>`;
 }
@@ -1108,14 +1120,14 @@ function applyMeta(side,id){
   L.rush=L.rush.map(rid);
   if(side==='me'){
     d.deck={c2:L.c2,c1:L.c1,total:L.total,name:L.name,meta:true};
-    d.pevs=L.evs.map(v=>({...v,n:Math.min(4,v.n)}));
+    d.pevs=L.evs.map(evFromMeta).filter(v=>v.val>0).map(v=>({...v,n:Math.min(4,v.n)}));
     d.deckRush=L.rush.map(v=>({...v,n:Math.min(4,v.n)}));
     deckText[side]=L.list; deckMsg[side]=''; d.dlist=null;
   }
   if(side==='op'){
     d.deckRush=L.rush.map(v=>({...v,n:Math.min(4,v.n)}));
     d.deck={c2:L.c2,c1:L.c1,total:L.total,name:L.name,meta:true};
-    d.pevs=L.evs.map(v=>({...v,n:Math.min(4,v.n)}));
+    d.pevs=L.evs.map(evFromMeta).filter(v=>v.val>0).map(v=>({...v,n:Math.min(4,v.n)}));
     d.rush=L.rush.map(v=>({...v,n:Math.min(4,v.n)}));
     deckText[side]=L.list; deckMsg[side]=''; d.dlist=null;
   }
@@ -1137,6 +1149,53 @@ const META_CHARS={}, META_EVS={}, META_LDS={};
   META_CHARS[a[0]]={id:a[0],name:a[1],p:+a[2]*1000,cost:+a[3],counter:+a[4]*1000,blk:a[5].includes('b'),da:a[5].includes('d'),rush:a[5].includes('r'),ub:a[5].includes('u')};});
 "EB04-008|Distorted Future|1|3|0;EB04-040|Flame Dragon Torch|1|4|0;EB05-008|Luffy, Now's Your Chance|1|4|0;EB05-040|You Need Me, Don't You?!!♡|0|2|0;EB05-049|Special Hollow|1|4|0;EB05-060|Take Care of Lilith!!!|1|4|0;OP01-057|Paradise Waterfall|1|2|0;OP02-068|Gum-Gum Rain|0|3|1;OP04-016|Bad Manners Kick Course|0|3|1;OP05-038|Charlestone|2|4|1;OP06-017|Meteor-Strike of Love|2|3|0;OP06-038|The Billion-fold World Trich|1|2|0;OP06-115|You're the One Who Should Di|0|3|1;OP07-056|Slave Arrow|1|4|0;OP07-076|Slow-Slow Beam Sword|2|2|0;OP08-115|The Earth Will Not Lose!|1|3|0;OP09-078|Gum-Gum Giant|1|4|1;OP10-018|Ten-Layer Igloo|2|3|0;OP10-019|Divine Departure|1|3|0;OP11-080|Gear Two|1|3|0;OP11-097|After All These Years I'm Lo|1|1|0;OP12-037|Demon Aura Nine Sword Style|1|3|0;OP12-038|Two-Sword Style Rashomon|1|3|0;OP12-115|I Love You!!|1|2|0;OP13-040|I Know You're Strong... So I|1|3|0;OP13-058|Phoenix Pyreapple|1|3|0;OP13-076|Divine Departure|0|3|1;OP14-018|Time for the Counterattack|1|4|0;OP14-037|For Fun|1|3|0;OP14-078|Bullet String|2|2|0;OP14-096|Ground Death|1|4|0;OP14-117|Brick Bat|1|3|0;OP15-078|Mamaragan|0|1|0;OP15-116|Gum-Gum Golden Rifle|1|4|0;OP16-020|If You're Coming with Me...|0|3|1;OP16-038|Let's Go!! To the Navy Headq|1|3|0;OP16-099|I've Come Here... To Cut Tho|1|3|0;OP17-017|Ga Ha Ha Ha!!|1|2|0;OP17-037|Are You That Afraid of the N|1|3|0;OP17-038|I Think He's Seen an Ugly Fu|0|3|1;OP17-055|There's No Authority in the|0|2|0;OP17-056|Rocks Pirates|0|2|0;OP17-076|Wo Ro Ro Ro Ro... I Think I'|0|3|1;OP17-077|Kundali Dragon Swarm|1|4|0;OP17-096|I'm Luffy!! The Man Who Will|1|4|0;OP17-098|Gum-Gum Kong Gun|1|3|0;ST10-015|Gum-Gum Giant Sumo Slap|1|2|0;ST13-017|Flame Dragon King|2|4|0".split(';').forEach(r=>{const a=r.split('|'); if(a.length<5) return; META_EVS[a[0]]={id:a[0],name:a[1],cost:+a[2],val:+a[3]*1000,disc:+a[4]};});
 "EB03-001|Nefeltari Vivi|5|4;EB04-001|Jewelry Bonney|5|4;EB05-010|Nico Robin|5|4;OP01-002|Trafalgar Law|5|4;OP05-060|Monkey.D.Luffy|5|5;OP05-098|Enel|5|4;OP06-021|Perona|5|4;OP07-019|Jewelry Bonney|5|5;OP07-059|Foxy|5|5;OP08-058|Charlotte Pudding|5|4;OP08-098|Kalgara|5|5;OP09-001|Shanks|5|5;OP09-042|Buggy|5|5;OP09-061|Monkey.D.Luffy|5|4;OP09-062|Nico Robin|5|4;OP09-081|Marshall.D.Teach|5|5;OP10-003|Sugar|5|4;OP11-001|Koby|5|4;OP11-022|Shirahoshi|5|5;OP11-040|Monkey.D.Luffy|6|3;OP11-041|Nami|5|4;OP12-061|Donquixote Rosinante|5|4;OP12-081|Koala|5|4;OP13-001|Monkey.D.Luffy|5|4;OP13-002|Portgas.D.Ace|6|3;OP13-004|Sabo|5|5;OP13-079|Imu|5|4;OP14-001|Trafalgar Law|5|5;OP14-020|Dracule Mihawk|5|5;OP14-041|Boa Hancock|5|4;OP14-080|Gecko Moria|5|4;OP15-058|Enel|5|5;OP16-001|Portgas.D.Ace|5|5;OP16-022|Monkey.D.Luffy|5|4;OP16-079|Yamato|5|5;OP16-080|Marshall.D.Teach|5|4;OP17-020|Shanks|5|5;OP17-039|Rocks.D.Xebec|5|5;OP17-058|Kaido|5|5;OP17-079|Monkey.D.Luffy|5|5;OP17-099|Charlotte Linlin|5|5;ST13-001|Sabo|5|4;ST29-001|Monkey.D.Luffy|5|6;ST30-001|Luffy & Ace|6|4".split(';').forEach(r=>{const a=r.split('|'); if(a.length<4) return; META_LDS[a[0]]={id:a[0],name:a[1],power:+a[2]*1000,life:+a[3]};});
+// 反擊事件逐張核對（optcg.one 卡文，2026-11-12）：val＝對攻擊者的實際效果（含讓攻擊者 −力量），gain＝用完回到手上的牌，note＝條件
+const EV_FIX={
+  'OP05-038':{disc:0,note:'+4000；之後可以丟 1 張，讓 3 張 DON!! 回到活躍（不是代價）'},
+  'OP10-018':{val:5000,note:'+3000，再讓攻擊者 −2000'},
+  'OP17-017':{val:4000,note:'Whitebeard 類型 +2000，再讓攻擊者 −2000'},
+  'OP14-078':{val:4000,note:'DON!!−1；Donquixote 領導者，+2000 再加 +2000'},
+  'OP12-018':{val:0,note:'只能加在角色（或 Rayleigh），保不了領導者'},
+  'OP09-078':{gain:2,note:'DON!!−2、丟 1 張；Straw Hat 領導者 +4000，再抽 2 張'},
+  'OP07-056':{gain:1,note:'把自己 1 隻 2 費以上角色回手當代價（手牌 +1）'},
+  'OP15-078':{note:'+1000；場上 DON!! 6 張以下再抽 1 張'},
+  'OP11-097':{note:'+1000；墓地 10 張以上回收 1 張 3 費以下黑角色'},
+  'OP12-115':{note:'+2000；生命 2 以下回收墓地的 Law'},
+  'OP06-017':{note:'代價是把 1 張生命加入手牌（生命 0 不能用）'},
+  'OP02-089':{note:'DON!!−1；讓對手合計 2 張卡各 −3000'},
+  'OP09-097':{note:'讓攻擊者 −4000 並無效效果'},
+  'OP06-038':{note:'+2000；有 8 張以上橫置的卡再 +2000'},
+  'ST13-017':{note:'+4000，之後重排生命卡'},
+  'OP14-096':{note:'墓地 10 張以上才有 +4000'},
+  'OP17-096':{note:'場上有 12 費以上角色才有 +4000'},
+  'OP14-018':{note:'場上有 8000 以上角色才有 +4000'},
+  'EB05-008':{note:'沒有 5 費以上角色才有 +4000'},
+  'OP13-098':{note:'Imu 領導者才能用'},
+  'OP11-115':{note:'Shirahoshi 領導者才能用'},
+  'OP08-115':{note:'Shandian Warrior 領導者才能用'},
+  'OP17-036':{note:'只能加在 Shanks'},
+  'OP16-058':{note:'只能加在 Buggy'},
+  'OP15-074':{note:'只能加在 Enel'},'OP15-075':{note:'只能加在 Enel'},'OP15-076':{note:'只能加在 Enel'},
+  'OP14-117':{note:'只能加在 Thriller Bark 類型'},
+  'EB05-049':{note:'代價是 KO 自己 1 隻 Thriller Bark 角色'},
+  'OP17-037':{note:'另外要橫置自己 1 張卡'},
+  'OP17-077':{note:'DON!!−1'},'EB04-040':{note:'DON!!−1'},'OP07-076':{note:'DON!!−1；之後橫置對手 1 隻角色'}
+};
+function fixEvs(){for(const id in META_EVS){const f=EV_FIX[id]; if(f) Object.assign(META_EVS[id],f);}}
+fixEvs();
+function evFromMeta(v){   // 環境牌組裡的事件（只有名字）對回卡號，套用核對過的數值
+  let e=v.id&&META_EVS[v.id]; if(!e){const c=Object.values(META_EVS).filter(x=>x.name===v.name); e=c.find(x=>x.cost===v.cost&&(x.disc||0)===(v.disc||0))||c.find(x=>x.cost===v.cost)||c[0];}
+  return e?{...v,id:e.id,name:e.name,val:e.val,cost:e.cost,disc:e.disc||0,gain:e.gain||0,note:e.note||''}:v;
+}
+function deckEvents(side){   // 這副牌（匯入、或環境資料）裡的反擊事件
+  const d=S[side], m=new Map(), add=(id,pct)=>{const e=META_EVS[id]; if(e&&e.val>0&&!m.has(id)) m.set(id,{...e,pct});};
+  if(d.dlist) Object.keys(d.dlist).forEach(id=>add(id,null));
+  else { const L=META_BY[d.lid]; if(L){
+    if(L.all) L.all.split(',').forEach(t=>{const [id,p]=t.split(':'); add(id,+p);});
+    else { (L.evs||[]).forEach(v=>{const e=evFromMeta(v); if(e.id) add(e.id,100);}); (META_RARE[d.lid]||'').split(',').filter(Boolean).forEach(t=>{const [id,p]=t.split(':'); add(id,+p);}); } } }
+  return [...m.values()].sort((a,b)=>(b.pct??0)-(a.pct??0)||b.val-a.val);
+}
+const evLab=v=>`${v.cost}C / +${v.val}${v.disc?` / 棄${v.disc}`:''}${v.gain?` / 回${v.gain}`:''}`;
 function deckChars(side){
   const d=S[side];
   if(d.dlist) return Object.entries(d.dlist).map(([id,n])=>{const c=cardOf(id);return c&&c.type==='char'?{...c,n}:null;}).filter(Boolean).sort((a,b)=>b.p-a.p||a.cost-b.cost);
@@ -1144,8 +1203,10 @@ function deckChars(side){
   // 新資料：這個領導者的牌組出現過的全部角色，照比例排
   if(L.all) return L.all.split(',').map(t=>{const [id,pct]=t.split(':');return META_CHARS[id]?{...META_CHARS[id],pct:+pct}:null;}).filter(Boolean)
     .sort((a,b)=>b.p-a.p||b.pct-a.pct||a.cost-b.cost);
-  return L.list.split(' ').map(t=>{const m=t.match(/^(\d+)x(.+)$/);return m&&META_CHARS[m[2]]?{...META_CHARS[m[2]],n:+m[1]}:null;}).filter(Boolean)
-    .sort((a,b)=>b.p-a.p||a.cost-b.cost);
+  // 內建資料：共識牌組＋少見卡清單裡的角色
+  const core=L.list.split(' ').map(t=>{const m=t.match(/^(\d+)x(.+)$/);return m&&META_CHARS[m[2]]?{...META_CHARS[m[2]],n:+m[1]}:null;}).filter(Boolean);
+  const rare=(META_RARE[d.lid]||'').split(',').filter(Boolean).map(t=>{const [id,pct]=t.split(':');return META_CHARS[id]&&!core.some(c=>c.id===id)?{...META_CHARS[id],pct:+pct}:null;}).filter(Boolean);
+  return core.concat(rare).sort((a,b)=>b.p-a.p||a.cost-b.cost);
 }
 function charPicker(side,i){
   const list=deckChars(side), c=S[side].chars[i];
@@ -1153,7 +1214,7 @@ function charPicker(side,i){
   return `<div class="sh-t">從牌組選角色（${S[side].deck?S[side].deck.name:''}）</div>
     <div class="mres">${list.map(x=>`<button class="mpick${c.cid===x.id?' on':''}" id="${side}-cp${i}-${x.id}" data-cpick="${x.id}" data-s="${side}" data-i="${i}" aria-pressed="${c.cid===x.id}" aria-label="${x.name} ${x.p}">
       ${cardFace({name:x.name,color:'',img:imgFor(x.id)})}<small>${x.cost}C ${x.p}${x.pct!=null?` <b>${x.pct}%</b>`:''}<br>${[x.blk?'擋':'',x.da?'雙':'',x.ub?'穿':'',x.rush?'速':''].filter(Boolean).join('')||'&nbsp;'}</small></button>`).join('')}</div>
-    ${list.some(x=>x.pct!=null)?'<p class="note">列出這個領導者的比賽牌組出現過的全部角色，照力量由高到低排；百分比＝有放這張的牌組比例。</p>':''}
+    <p class="note">${META_BY[S[side].lid]&&META_BY[S[side].lid].all&&!S[side].dlist?'列出這個領導者的比賽牌組出現過的全部角色，照力量由高到低排；百分比＝有放這張的牌組比例。':S[side].dlist?'列出你匯入的牌組裡的角色。':'目前是內建資料：只有共識牌組和少見卡裡的角色（有百分比的是少見卡）。GitHub 版更新資料後會列出全部角色。'}</p>
     <p class="note">選了會帶入力量和關鍵字；DON!! 或效果加的力量請再手動調。</p>`;
 }
 function pickChar(side,i,id){
@@ -1261,18 +1322,27 @@ function renderSheet(){
         <input type="text" id="${id}-name" data-text="${P}.name" value="${v.name.replace(/"/g,'&quot;')}" placeholder="名稱（選填）" aria-label="事件${j+1}名稱">
         <button class="danger" id="${id}-del" data-delev="${j}" data-list="${key}" aria-label="移除事件${j+1}">移除</button></div>
         <div class="evfmt">${num('cost',0,10)}<span>C</span><span class="sep">/</span>${num('val',0,10000,'w',1000)}<span class="sep">/</span>${num('n',0,10)}<span>張${max?'(MAX)':''}</span><span class="sep">/</span><span>棄</span>${num('disc',0,5)}</div></div>`;}).join('');
-    const evAdd=key=>d[key].length<5?`<div class="evadd"><button class="ghost" id="${side}-${key}-add" data-addev="normal" data-list="${key}">＋ 反擊事件</button><button class="ghost" id="${side}-${key}-blade" data-addev="blade" data-list="${key}">＋ 棄手牌的刀</button></div>`:'';
+    // 有卡號的事件顯示成卡片列（淡化卡圖、− 張數 +），沒有卡號的（手動新增）才用舊的輸入格
+    const evChips=(key,max)=>d[key].map((v,j)=>!v.id?evRowOne(key,j,v,max):`<div class="evc"><span class="bg" style="background-image:url('${imgFor(v.id)}')"></span>
+        <div class="evm"><b>${v.name}</b><small>${evLab(v)}${v.note?`<br>${v.note}`:''}</small></div>
+        <div class="evn"><button class="ghost" id="${side}-${key}${j}-m" data-evn="${j}" data-d="-1" data-list="${key}" aria-label="${v.name} 少 1 張">−</button><b>${v.n}</b><button class="ghost" id="${side}-${key}${j}-p" data-evn="${j}" data-d="1" data-list="${key}" aria-label="${v.name} 多 1 張">＋</button></div></div>`).join('');
+    const evRowOne=(key,j,v,max)=>evRows(key,max).split('<div class="evrow">').filter(Boolean)[j]?'<div class="evrow">'+evRows(key,max).split('<div class="evrow">').filter(Boolean)[j]:'';
+    const evPick=key=>{const L=deckEvents(side); if(!L.length) return '';
+      return `<div class="evpick">${L.map(e=>`<button class="evp" id="${side}-${key}-pk-${e.id}" data-pickev="${e.id}" data-list="${key}"><span class="bg" style="background-image:url('${imgFor(e.id)}')"></span><b>${e.name}</b><small>${evLab(e)}${e.pct!=null&&e.pct<100?` ・${e.pct}%`:''}</small></button>`).join('')}</div>`;};
+    const evAdd=key=>{const pk=evPick(key);
+      const manual=`<div class="evadd"><button class="ghost" id="${side}-${key}-add" data-addev="normal" data-list="${key}">＋ 反擊事件</button><button class="ghost" id="${side}-${key}-blade" data-addev="blade" data-list="${key}">＋ 棄手牌的刀</button></div>`;
+      return pk?`<p class="note">點下面的事件加進去（同一張再點會加張數）：</p>${pk}<details class="manual"><summary>手動新增</summary>${manual}</details>`:manual;};
     const fmtHint='<span style="font-weight:400;letter-spacing:0">費用C / +力量 / 張數 / 要棄幾張手牌</span>';
     const known=d.c2+d.c1+d.evs.reduce((a,v)=>a+v.n,0);
     if(me){
       h+=stepper('me.c2','2000反擊',1,0,20)+stepper('me.c1','1000反擊',1,0,20)+
-        `<div class="sh-t">反擊事件　${fmtHint}</div>${evRows('evs',false)}${evAdd('evs')}`+
+        `<div class="sh-t">反擊事件</div>${evChips('evs',false)}${evAdd('evs')}`+
         `<p class="note" style="${known>d.hand?'color:var(--warn)':''}">反擊牌合計 ${known} 張${known>d.hand?'，超過手牌張數':`，其餘 ${d.hand-known} 張當作沒有反擊值（可拿來棄）`}。</p>`;
     }else{
       h+=`<div class="sh-t">已知在對手手上的牌</div>`+stepper('op.c2','2000反擊',1,0,20)+stepper('op.c1','1000反擊',1,0,20)+
-        `<div class="sh-t">已知的反擊事件　${fmtHint}</div>${evRows('evs',false)}${evAdd('evs')}`+
+        `<div class="sh-t">已知的反擊事件</div>${evChips('evs',false)}${evAdd('evs')}`+
         `<p class="note" style="${known>d.hand?'color:var(--warn)':''}">已知 ${known} 張${known>d.hand?'，超過手牌張數':`，其餘 ${d.hand-known} 張未知`}。結果會列出「已知的牌之外，未知的牌還要有什麼」才擋得住。</p>`+
-        `<div class="sh-t">未知的牌可能是這些事件　${fmtHint}</div>${evRows('pevs',true)}${evAdd('pevs')}`+
+        `<div class="sh-t">未知的牌可能是這些事件（張數＝最多幾張）</div>${evChips('pevs',true)}${evAdd('pevs')}`+
         '<p class="note">可能的事件會算進組合，例如「1C/4000×1 + 1000×1」。費用受對手剩餘 DON!! 限制；要棄的手牌也算進張數。</p>';
     }
     return h;
@@ -1346,6 +1416,8 @@ document.addEventListener('click',e=>{
     const f=$(`${t.dataset.addrush}-rush${S[t.dataset.addrush].rush.length-1}-cost`);if(f)f.focus();return;}
   if(t.dataset.delrush!==undefined){S[t.dataset.s].rush.splice(+t.dataset.delrush,1);markTouched();renderRush();schedule();const a=$(`${t.dataset.s}-addrush`);if(a)a.focus();return;}
   if(t.dataset.addev){S[sheet.side][t.dataset.list||'evs'].push(t.dataset.addev==='blade'?{name:'刀',n:1,val:3000,cost:0,disc:1}:{name:'',n:1,val:2000,cost:1,disc:0});changed(true);return;}
+  if(t.dataset.pickev){const L=S[sheet.side][t.dataset.list||'evs'], e=META_EVS[t.dataset.pickev]; if(e){const k=L.findIndex(v=>v.id===e.id); if(k>=0) L[k].n=Math.min(4,L[k].n+1); else if(L.length<8) L.push({id:e.id,name:e.name,n:1,val:e.val,cost:e.cost,disc:e.disc||0,gain:e.gain||0,note:e.note||''});} changed(true); return;}
+  if(t.dataset.evn!==undefined){const L=S[sheet.side][t.dataset.list||'evs'], j=+t.dataset.evn; if(L[j]){L[j].n+= +t.dataset.d; if(L[j].n<=0) L.splice(j,1); else L[j].n=Math.min(4,L[j].n);} changed(true); return;}
   if(t.dataset.delev!==undefined){S[sheet.side][t.dataset.list||'evs'].splice(+t.dataset.delev,1);changed(true);return;}
 });
 document.addEventListener('input',e=>{
