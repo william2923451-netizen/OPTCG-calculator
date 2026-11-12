@@ -48,7 +48,7 @@
       // 少見卡：不到 4 成有放、跟計算有關
       const rr = freq.filter(f => f.pct < 40).filter(f => { const c = info[f.id]; return FX_IDS.has(f.id) || (c && (counterOf(c) || (/CHARACTER/.test(c.type) && /\[Rush\]/.test(c.eff)))); });
       if (rr.length) rare[lid] = rr.map(f => f.id + ':' + f.pct).join(',');
-      if (N < (opts.minDecks || 3)) continue;
+      if (N < (opts.minDecks || 1)) continue;
       // 共識牌組：4 成以上的牌組有放，張數取平均
       // 依比例由高到低放進去，總張數不超過 50
       const core = []; let room = 50;
@@ -64,6 +64,7 @@
       }
       evs.sort((a, b) => b.val - a.val || a.cost - b.cost);
       leaders.push({ id: lid, name: L.name, color: L.color, power: L.power || 5000, life: L.life || 4, decks: N, total, c2, c1, evs, rush,
+        all: freq.map(f => f.id + ':' + f.pct).join(','),   // 這個領導者的牌組出現過的全部卡片＋比例
         list: core.slice().sort((a, b) => b.n - a.n).map(f => f.n + 'x' + f.id).join(' ') });
     }
     leaders.sort((a, b) => b.decks - a.decks);
@@ -76,7 +77,7 @@
       if (/CHARACTER/.test(c.type)) ch[id] = [c.name, c.power / 1000, c.cost, c.counter / 1000, flags(c)];
       else { const ce = counterOf(c); if (ce) ev[id] = [c.name, c.cost, ce.val / 1000, ce.disc]; }
     }
-    return { v: 1, date: opts.date || new Date().toISOString().slice(0, 10), fmt, n: decks.length, leaders, ch, ev, ld, rare };
+    return { v: 2, date: opts.date || new Date().toISOString().slice(0, 10), fmt, n: decks.length, leaders, ch, ev, ld, rare };
   }
   function extractRaw(html) {   // 從 /decklists 的 HTML 抽出內嵌 JSON
     const m = html.match(/<script type="application\/json" id="decklists-initial-data">([\s\S]*?)<\/script>/);
