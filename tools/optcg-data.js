@@ -60,7 +60,7 @@
           if (c.counter === 2000) c2 += f.n; else if (c.counter === 1000) c1 += f.n;
           if (/\[Rush\]/.test(c.eff)) rush.push({ name: c.name, n: f.n, p: c.power, cost: c.cost, da: /\[Double Attack\]/.test(c.eff), ub: /\[Unblockable\]/.test(c.eff) });
         }
-        const ce = counterOf(c); if (ce) evs.push({ name: c.name, n: f.n, val: ce.val, cost: c.cost, disc: ce.disc });
+        const ce = counterOf(c); if (ce) evs.push({ id: f.id, name: c.name, n: f.n, val: ce.val, cost: c.cost, disc: ce.disc });
       }
       evs.sort((a, b) => b.val - a.val || a.cost - b.cost);
       leaders.push({ id: lid, name: L.name, color: L.color, power: L.power || 5000, life: L.life || 4, decks: N, total, c2, c1, evs, rush,
