@@ -67,6 +67,13 @@ button{font-family:var(--f-body);cursor:pointer;color:inherit}
 .card .don{position:absolute;top:-9px;left:50%;transform:translateX(-50%);white-space:nowrap;background:var(--don);color:var(--don-ink);font-family:var(--f-num);font-size:11px;font-weight:700;border-radius:999px;padding:0 6px;line-height:18px}
 .cardw{position:relative;min-width:0}
 .cardw>.card{width:100%;box-sizing:border-box}
+.rare{display:flex;flex-direction:column;gap:6px}
+.rpick{display:grid;grid-template-columns:44px 1fr auto;align-items:center;gap:8px;text-align:left;border:1px solid var(--line);background:var(--bg);color:var(--ink);border-radius:8px;padding:8px 10px;font-size:14px}
+.rpick .rp{font-family:var(--f-num);font-weight:700;color:var(--muted)}
+.rpick .rn{min-width:0;overflow:hidden;text-overflow:ellipsis}.rpick small{display:block;color:var(--muted);font-size:12px}
+.rpick .rt{font-size:12px;color:var(--muted);white-space:nowrap}
+.rpick.on{border-color:var(--op)}.rpick.on .rt{color:var(--op);font-weight:700}
+.rpick[disabled]{opacity:.6}
 .rtg{position:absolute;top:-9px;left:-7px;height:24px;min-width:24px;border-radius:12px;border:1px solid var(--line);background:var(--panel);color:var(--muted);font-size:12px;font-weight:700;line-height:1;padding:0 6px;z-index:2}
 .rtg.on{background:var(--me);border-color:var(--me);color:#fff}
 .rm{position:absolute;top:-9px;right:-7px;width:24px;height:24px;border-radius:50%;border:1px solid var(--line);background:var(--panel);color:var(--muted);font-size:14px;line-height:1;padding:0;display:flex;align-items:center;justify-content:center;z-index:2}
@@ -261,6 +268,8 @@ details ul{margin:8px 0 0;padding-left:20px;color:var(--muted)}
       <li>我方「已橫置」（v24）：代表這回合已經攻擊過，不再參與這回合攻擊，對手回合也不能阻擋。用來在解怪後調整剩下的攻擊。</li>
       <li>阻擋者會死（v25）：你的攻擊力 ≥ 對手阻擋者力量時，阻擋者被 KO。對手會先用擋了不會死、或下回合本來就不攻擊的阻擋者。只有「不擋就守不住」時才當成他一定會擋，下回合少那隻攻擊者；否則照他不擋（對你最不利）算，另外列出擋了的結果。解怪比較裡的各種打法沒有算阻擋者死亡。</li>
       <li>我方角色左上的「橫」：設成已橫置（攻擊或解怪用過了），不會再攻擊，下回合也不能阻擋。打完一部分後把用過的角色按「橫」、把被解掉的對手角色移除，就能重算剩下怎麼打。</li>
+      <li>【DON!!×1】（v27）：紅綠魯夫領導者效果要領導者身上有 DON!!。你方照這回合配法有沒有貼到領導者判斷；對手方在對手領導者面板設定（預設有）。</li>
+      <li>少見卡（v26）：選環境牌組時，不到 4 成牌組有放的反擊事件、速攻、補血卡會列出來並附比例，預設不算；在領導者面板按「算進去」才會加入計算。</li>
       <li>攻擊一律打領導者，不算打角色、KO、效果、觸發（觸發可能直接翻盤）。</li>
       <li>假設防守方看得到你全部配法再決定怎麼擋（最保守）。實戰你可以攻擊之間再貼DON!!，所以先攻擊再決定DON!!通常比這裡算的更好。</li>
       <li>攻擊力 ≥ 防守力就命中；所以需要的反擊值 = 攻擊力 − 防守力 + 1000。</li>
@@ -280,7 +289,7 @@ details ul{margin:8px 0 0;padding-left:20px;color:var(--muted)}
 // dpow：防守時可用的加力（不算手牌張數）；val 加的力量、cost 要用的 DON!!、disc 要丟的手牌、n 次數（'don5'＝活躍 DON!! ≤5 時每張 DON!! 一次）
 // vsChar：只能對付角色的攻擊（計算時視為任一下都能用，偏樂觀）；leaderOnly：只加在領導者
 const EFX={
-  'OP13-001':{name:'Luffy（紅綠）領導者',dpow:{val:2000,cost:1,n:'don5'},txt:'被攻擊時，活躍 DON!! 5 張以下：每橫置 1 張 DON!! +2000'},
+  'OP13-001':{name:'Luffy（紅綠）領導者',dpow:{val:2000,cost:1,n:'don5',needLdon:1},txt:'【DON!!×1】被攻擊時，活躍 DON!! 5 張以下：每橫置 1 張 DON!! +2000（領導者身上要有 DON!!）'},
   'OP17-058':{name:'Kaido 領導者',dpow:{val:2000,cost:1,n:1,vsChar:1},txt:'被攻擊時 DON!!−1：攻擊的角色 −2000（每回合 1 次）'},
   'OP05-098':{name:'Enel（黃）領導者',lifePlus:1,txt:'對手回合生命變 0 時補 1 血（再丟 1 張）'},
   'OP17-040':{name:'Edward.Newgate',dpow:{val:3000,disc:1,n:1,leaderOnly:1},txt:'領導者被攻擊時丟 1 張：+3000（每回合 1 次）'},
@@ -321,6 +330,7 @@ function fxOf(d){   // 一方目前生效的效果（領導者＋場上角色）
 function fxDefense(d,dDon){  // 換成防守時能用的「不佔手牌」反擊資源
   const items=[];
   for(const f of fxOf(d)){ if(!f.dpow) continue; const p=f.dpow;
+    if(p.needLdon&&d.ldon===false) continue;   // 【DON!!×1】：領導者身上沒有 DON!! 就不能用
     let n=p.n==='don5'?(dDon<=5?dDon:0):p.n; if(!n) continue;
     items.push({name:f.name,n,val:p.val,cost:p.cost||0,disc:p.disc||0,nocard:true,free:true,fx:1});
   }
@@ -634,6 +644,25 @@ function calcBase(S){
     } else blk={...bd,forced:false,alt:null};
   }
   const BD=blk.forced?blk.dead:[];
+  // 我方領導者的【DON!!×1】效果：照這回合的配法，領導者有沒有貼到 DON!!
+  const needL=fxOf(S.me).some(f=>f.dpow&&f.dpow.needLdon);
+  const ldonMe=needL?!!(best&&best.atks[0]&&best.atks[0].don>0):null;
+  let ldonHint=null;
+  if(needL){
+    S={...S,me:{...S.me,ldon:ldonMe}};
+    if(!ldonMe&&survival(S,BD,myBlockers,myHand,0).worst.lethal){
+      // 領導者貼 1 張、再留 r 張活躍 DON!! 給效果，看能不能守住
+      const pool=Math.max(0,S.me.don-myRushCost);
+      for(let r=0;r<=Math.min(5,pool-1);r++){
+        const w=survival({...S,me:{...S.me,ldon:true}},BD,myBlockers,myHand,r).worst;
+        if(!w.lethal){
+          const atk2=meAtk.concat(myExtra).map((a,i)=>i===0?{...a,p:a.p+1000}:a);
+          const b2=analyze(atk2,pool-1-r,atkDef)[0];
+          ldonHint={saves:true,r,minCards:b2.minCards,lethal:b2.lethal,need:w.hand?w.hand.cards:0}; break;
+        }
+      }
+    }
+  }
   const svNo=blk.dead.length&&!blk.forced?survival(S,blk.dead,myBlockers,myHand,0).worst:null;
   const sv=survival(S,BD,myBlockers,myHand,0,true);
   let reserve=null;
@@ -700,7 +729,7 @@ function calcBase(S){
       if(R.lethal) threats.me.push({name:r.name,cost:r.cost,p:r.p,atks:R.atks});
     }
   }
-  return {threats,trig,blk,svNo,lifeOpts,effects,johnOp,johnMe:sv.johnMe,best,A,myRushTxt,myBase,hasMyRush:hasMyRush>0,myRushCnt,myExtra,myRushCost,opBlockers,myBlockers,myHand,atkDef,
+  return {threats,trig,blk,svNo,ldonMe,ldonHint,lifeOpts,effects,johnOp,johnMe:sv.johnMe,best,A,myRushTxt,myBase,hasMyRush:hasMyRush>0,myRushCnt,myExtra,myRushCost,opBlockers,myBlockers,myHand,atkDef,
           worst:sv.worst,base:sv.base,rushTxt:sv.rushTxt,opHasRush:sv.opHasRush,reserve,view:sv.view,viewA:sv.viewA,viewRush:sv.viewRush};
 }
 
@@ -784,6 +813,7 @@ function koSearch(S,B,budget,progress){
 
 function calcAll(S,budget,post){
   const B=calcBase(S);
+  if(B.ldonMe!=null) S={...S,me:{...S.me,ldon:B.ldonMe}};
   post({stage:'base',B});
   const K=koSearch(S,B,budget,pct=>post({stage:'progress',pct}));
   post({stage:'ko',K});
@@ -791,7 +821,7 @@ function calcAll(S,budget,post){
 
 </script>
 <script>
-const APP_VERSION='v25';
+const APP_VERSION='v27';
 const S = {
   me:{ leader:5000, lda:false, lub:false, life:2, hand:4, c2:1, c1:2, evs:[], rush:[], don:10, defDon:0, lk:[], lke:[],
        chars:[{p:5000,atk:true,blk:false,da:false,ub:false},{p:7000,atk:true,blk:false,da:false,ub:false},{p:7000,atk:true,blk:false,da:false,ub:false},{p:3000,atk:false,blk:true,da:false,ub:false}] },
@@ -853,7 +883,7 @@ function leaderResults(side){
 }
 function pickLeader(side,id){
   const c=META_LDS[id]; if(!c) return;
-  S[side].lid=id; S[side].leader=c.power;   // HP 是對局中的現況，不跟著領導者重設
+  S[side].lid=id; S[side].leader=c.power; S[side].ldon=true;   // HP 是對局中的現況，不跟著領導者重設
 }
 // 牌組清單：「4xOP09-057」「OP09-057 x4」「4 OP09-057」都可以
 function parseDeck(text){
@@ -906,6 +936,37 @@ function deckBox(side){
 const META={"fmt":"OP17","n":345,"date":"2026-11-12","leaders":[{"id":"OP17-039","name":"Rocks.D.Xebec","color":"Blue","power":5000,"life":5,"decks":63,"total":50,"c2":0,"c1":4,"evs":[{"name":"There's No Authority in the World That Lasts Forever!!!","n":4,"val":2000,"cost":0,"disc":0},{"name":"Rocks Pirates","n":4,"val":2000,"cost":0,"disc":0}],"rush":[],"list":"4xOP17-040 4xOP17-048 4xOP17-055 4xOP17-056 4xOP17-118 4xOP17-049 4xOP17-046 4xOP17-054 4xOP17-045 4xOP08-051 4xOP17-052 3xOP17-044 3xOP17-042"},{"id":"OP13-001","name":"Monkey.D.Luffy","color":"Red/Green","power":5000,"life":4,"decks":38,"total":48,"c2":8,"c1":26,"evs":[],"rush":[{"name":"Shanks","n":3,"p":12000,"cost":10,"da":false,"ub":false}],"list":"4xOP14-031 4xOP13-016 4xEB05-001 4xOP06-033 4xOP12-023 4xEB01-013 4xST32-002 4xOP13-031 4xOP07-022 4xST30-004 3xOP17-022 3xOP01-055 2xST32-001"},{"id":"OP05-098","name":"Enel","color":"Yellow","power":5000,"life":4,"decks":23,"total":50,"c2":12,"c1":26,"evs":[{"name":"You're the One Who Should Disappear.","n":4,"val":3000,"cost":0,"disc":1}],"rush":[],"list":"4xOP17-109 4xOP17-107 4xOP17-112 4xEB04-058 4xOP17-114 4xOP16-119 4xOP11-106 4xOP06-115 4xOP17-113 4xOP17-102 4xOP15-103 3xOP13-113 3xOP17-106"},{"id":"ST30-001","name":"Luffy & Ace","color":"Red/Green","power":6000,"life":4,"decks":21,"total":49,"c2":0,"c1":21,"evs":[{"name":"Bad Manners Kick Course","n":4,"val":3000,"cost":0,"disc":1},{"name":"Demon Aura Nine Sword Style Asura Blades Drawn Dead Man's Game","n":2,"val":3000,"cost":1,"disc":0},{"name":"I Know You're Strong... So I'll Go All Out from the Very Start!!!","n":2,"val":3000,"cost":1,"disc":0},{"name":"Ga Ha Ha Ha!!","n":3,"val":2000,"cost":1,"disc":0},{"name":"The Billion-fold World Trichiliocosm","n":2,"val":2000,"cost":1,"disc":0}],"rush":[{"name":"Sanji","n":4,"p":3000,"cost":5,"da":false,"ub":false},{"name":"Monkey.D.Luffy","n":4,"p":6000,"cost":4,"da":false,"ub":false},{"name":"Monkey.D.Luffy","n":4,"p":6000,"cost":5,"da":false,"ub":false}],"list":"4xOP01-016 4xEB02-017 4xOP12-015 4xST31-001 4xST31-005 4xEB04-002 4xST30-012 4xOP04-016 4xST21-014 3xOP17-017 3xOP12-018 2xOP12-037 2xOP13-040 2xOP06-038 1xOP15-032"},{"id":"OP17-058","name":"Kaido","color":"Purple","power":5000,"life":5,"decks":20,"total":50,"c2":10,"c1":8,"evs":[{"name":"Flame Dragon Torch","n":1,"val":4000,"cost":1,"disc":0},{"name":"Wo Ro Ro Ro Ro... I Think I've Sobered Up","n":1,"val":3000,"cost":0,"disc":1},{"name":"Slow-Slow Beam Sword","n":3,"val":2000,"cost":2,"disc":0},{"name":"Mamaragan","n":4,"val":1000,"cost":0,"disc":0}],"rush":[],"list":"4xEB04-032 4xOP17-073 4xEB04-031 4xOP07-077 4xOP15-078 4xOP17-074 4xOP17-062 3xOP17-061 3xST34-004 3xOP07-076 2xOP17-063 2xOP17-065 3xOP17-075 3xOP08-074 1xOP17-076 1xEB04-040 1xOP09-077"},{"id":"OP17-079","name":"Monkey.D.Luffy","color":"Black","power":5000,"life":5,"decks":18,"total":50,"c2":14,"c1":17,"evs":[{"name":"Gum-Gum Kong Gun","n":1,"val":3000,"cost":1,"disc":0}],"rush":[{"name":"Monkey.D.Luffy","n":4,"p":8000,"cost":8,"da":false,"ub":false}],"list":"4xOP17-081 4xOP17-080 4xOP17-095 4xOP17-119 4xOP17-093 4xOP17-094 4xOP17-082 4xOP15-088 3xOP17-087 3xOP17-086 3xOP17-091 3xOP17-089 3xST14-017 2xOP17-084 1xOP17-098"},{"id":"OP13-004","name":"Sabo","color":"Red/Black","power":5000,"life":5,"decks":15,"total":50,"c2":11,"c1":19,"evs":[{"name":"Ground Death","n":2,"val":4000,"cost":1,"disc":0},{"name":"Bad Manners Kick Course","n":2,"val":3000,"cost":0,"disc":1}],"rush":[{"name":"Monkey.D.Luffy","n":4,"p":8000,"cost":8,"da":false,"ub":false}],"list":"4xOP17-080 4xOP17-095 4xOP17-089 4xOP17-087 4xOP17-119 4xOP17-082 4xOP15-088 4xOP17-093 3xOP17-086 3xOP17-084 2xST01-011 2xOP17-083 2xOP04-016 2xOP13-007 2xOP01-016 2xOP14-096"},{"id":"OP17-020","name":"Shanks","color":"Green","power":5000,"life":5,"decks":14,"total":50,"c2":13,"c1":16,"evs":[{"name":"Are You That Afraid of the New Era?!!","n":3,"val":3000,"cost":1,"disc":0}],"rush":[{"name":"Shanks","n":4,"p":12000,"cost":10,"da":false,"ub":false}],"list":"4xOP17-032 4xOP17-031 4xOP17-027 4xST32-002 4xOP12-034 4xOP17-022 4xOP17-033 3xOP17-021 4xOP17-036 3xOP17-037 3xOP13-031 3xOP17-026 3xOP17-029 2xST16-004 1xOP15-036"},{"id":"OP08-058","name":"Charlotte Pudding","color":"Purple/Yellow","power":5000,"life":4,"decks":12,"total":50,"c2":15,"c1":24,"evs":[{"name":"Mamaragan","n":4,"val":1000,"cost":0,"disc":0}],"rush":[],"list":"4xOP08-062 4xOP17-109 4xOP17-107 4xOP17-103 4xOP17-114 4xOP17-112 4xOP15-078 4xOP17-104 3xOP11-067 4xOP11-106 4xOP12-112 4xOP11-070 3xOP05-073"},{"id":"OP15-058","name":"Enel","color":"Purple","power":5000,"life":5,"decks":12,"total":50,"c2":0,"c1":24,"evs":[{"name":"Mamaragan","n":4,"val":1000,"cost":0,"disc":0}],"rush":[{"name":"Shura","n":4,"p":2000,"cost":1,"da":false,"ub":false}],"list":"4xOP15-067 4xOP15-061 4xOP15-078 4xOP15-075 4xOP15-076 4xOP15-077 4xOP15-118 4xOP12-071 3xOP15-074 3xOP15-066 3xOP05-077 2xST10-010 3xOP12-063 4xOP15-071"},{"id":"OP12-061","name":"Donquixote Rosinante","color":"Purple/Yellow","power":5000,"life":4,"decks":10,"total":50,"c2":6,"c1":15,"evs":[{"name":"I Love You!!","n":4,"val":2000,"cost":1,"disc":0},{"name":"Slow-Slow Beam Sword","n":2,"val":2000,"cost":2,"disc":0},{"name":"Mamaragan","n":4,"val":1000,"cost":0,"disc":0}],"rush":[],"list":"4xOP16-078 4xP-093 4xP-088 4xEB04-058 4xEB04-038 4xOP16-065 4xOP15-078 4xOP12-115 4xOP16-064 4xST10-010 3xOP12-108 3xOP09-077 2xOP07-076 2xOP10-114"},{"id":"OP09-042","name":"Buggy","color":"Blue","power":5000,"life":5,"decks":10,"total":50,"c2":11,"c1":18,"evs":[],"rush":[],"list":"4xOP09-056 4xST25-005 4xST25-003 4xEB05-021 4xOP09-048 4xOP09-051 4xST25-001 4xST25-002 4xOP09-057 4xOP16-056 3xST33-004 2xOP06-058 3xOP09-060 2xEB05-028"},{"id":"OP09-081","name":"Marshall.D.Teach","color":"Black","power":5000,"life":5,"decks":9,"total":50,"c2":8,"c1":20,"evs":[],"rush":[],"list":"4xOP09-089 4xOP09-090 4xOP09-086 4xOP09-083 4xOP10-082 4xOP09-099 4xOP09-095 4xOP11-083 4xOP09-093 3xOP09-096 3xOP09-098 2xST27-003 3xOP07-096 2xEB05-046 1xST27-005"},{"id":"OP14-041","name":"Boa Hancock","color":"Blue/Yellow","power":5000,"life":4,"decks":9,"total":50,"c2":11,"c1":21,"evs":[{"name":"You're the One Who Should Disappear.","n":2,"val":3000,"cost":0,"disc":1}],"rush":[],"list":"4xOP14-112 4xEB04-058 4xOP14-105 4xOP16-113 4xOP14-107 4xOP14-114 4xOP15-113 4xOP17-109 4xOP14-104 3xOP11-054 3xOP06-106 2xOP16-119 2xOP06-115 2xOP06-058 2xEB05-028"},{"id":"OP09-062","name":"Nico Robin","color":"Purple/Yellow","power":5000,"life":4,"decks":7,"total":50,"c2":14,"c1":25,"evs":[{"name":"Gum-Gum Giant","n":3,"val":4000,"cost":1,"disc":1}],"rush":[{"name":"Charlotte Perospero","n":2,"p":4000,"cost":7,"da":false,"ub":false}],"list":"4xOP17-109 4xOP17-074 4xOP17-102 4xOP17-114 4xOP17-112 4xOP17-107 4xOP17-113 4xOP16-119 3xOP09-078 4xST34-003 3xEB04-058 3xOP17-106 2xOP05-073 2xOP17-110 1xOP17-111"},{"id":"EB05-010","name":"Nico Robin","color":"Green/Yellow","power":5000,"life":4,"decks":6,"total":50,"c2":10,"c1":24,"evs":[],"rush":[{"name":"Shanks","n":3,"p":12000,"cost":10,"da":false,"ub":false}],"list":"4xOP13-113 4xEB05-055 4xOP17-109 3xEB05-052 4xEB05-016 3xOP17-022 3xOP14-118 3xEB04-018 4xEB05-050 3xOP12-112 4xOP14-102 4xOP14-110 4xOP14-111 3xOP14-104"},{"id":"OP01-002","name":"Trafalgar Law","color":"Red/Green","power":5000,"life":4,"decks":5,"total":50,"c2":11,"c1":29,"evs":[],"rush":[{"name":"Shanks","n":2,"p":12000,"cost":10,"da":false,"ub":false}],"list":"4xOP14-013 4xEB05-001 4xOP12-034 4xEB01-013 4xST32-002 4xST30-004 4xEB01-012 4xOP13-031 4xOP12-023 3xST32-005 4xOP07-022 4xST32-001 2xOP17-022 1xOP06-033"},{"id":"OP08-098","name":"Kalgara","color":"Yellow","power":5000,"life":5,"decks":4,"total":50,"c2":13,"c1":24,"evs":[{"name":"The Earth Will Not Lose!","n":3,"val":3000,"cost":1,"disc":0}],"rush":[{"name":"Monkey.D.Luffy","n":2,"p":7000,"cost":5,"da":false,"ub":false}],"list":"4xOP15-101 4xOP08-110 4xEB04-058 4xOP12-099 4xOP15-114 4xOP05-117 4xOP08-109 4xEB03-053 3xOP15-108 3xOP11-106 3xOP12-114 3xOP17-114 3xOP08-115 2xOP15-119 1xOP08-099"},{"id":"OP16-022","name":"Monkey.D.Luffy","color":"Green/Blue","power":5000,"life":4,"decks":4,"total":48,"c2":10,"c1":21,"evs":[{"name":"Let's Go!! To the Navy Headquarters!!","n":3,"val":3000,"cost":1,"disc":0},{"name":"I Know You're Strong... So I'll Go All Out from the Very Start!!!","n":3,"val":3000,"cost":1,"disc":0},{"name":"Gum-Gum Rain","n":1,"val":3000,"cost":0,"disc":1}],"rush":[],"list":"4xOP16-042 4xOP16-034 4xOP16-054 4xOP16-055 4xOP16-048 4xOP16-056 4xOP16-045 3xOP16-038 3xOP16-027 3xST30-014 2xOP16-032 3xOP13-040 2xST12-010 2xOP15-032 1xOP16-026 1xOP02-068"},{"id":"OP13-079","name":"Imu","color":"Black","power":5000,"life":4,"decks":4,"total":50,"c2":10,"c1":23,"evs":[{"name":"Ground Death","n":4,"val":4000,"cost":1,"disc":0},{"name":"After All These Years I'm Losing My Edge!!!","n":1,"val":1000,"cost":1,"disc":0}],"rush":[{"name":"St. Ethanbaron V. Nusjuro","n":4,"p":5000,"cost":6,"da":false,"ub":false}],"list":"4xOP13-086 4xOP13-083 4xOP13-089 4xOP13-080 4xOP13-091 4xOP13-084 4xOP13-082 4xOP13-096 4xOP13-098 4xOP14-096 3xOP05-082 3xOP13-092 3xOP13-095 1xOP11-097"},{"id":"OP14-080","name":"Gecko Moria","color":"Black/Yellow","power":5000,"life":4,"decks":4,"total":50,"c2":8,"c1":25,"evs":[{"name":"Ground Death","n":1,"val":4000,"cost":1,"disc":0}],"rush":[],"list":"4xOP14-102 4xOP17-109 4xOP14-110 4xOP14-111 4xOP14-104 4xOP14-112 4xEB04-058 4xPRB02-013 3xOP15-084 4xOP13-113 4xOP14-100 2xPRB02-016 2xOP14-109 2xOP16-104 1xOP14-096"},{"id":"OP16-079","name":"Yamato","color":"Black","power":5000,"life":5,"decks":3,"total":48,"c2":12,"c1":20,"evs":[{"name":"Ground Death","n":4,"val":4000,"cost":1,"disc":0},{"name":"I've Come Here... To Cut Those Chains!!!","n":4,"val":3000,"cost":1,"disc":0}],"rush":[],"list":"4xOP16-098 4xOP16-087 4xOP16-099 4xOP16-084 4xOP16-085 4xOP16-097 4xOP16-096 3xOP16-092 4xOP16-082 4xOP16-091 4xOP16-081 4xOP14-096 1xOP16-088"},{"id":"OP16-001","name":"Portgas.D.Ace","color":"Red","power":5000,"life":5,"decks":3,"total":48,"c2":8,"c1":11,"evs":[{"name":"If You're Coming with Me... Kiss Your Lives Goodbye!!","n":2,"val":3000,"cost":0,"disc":1},{"name":"Ga Ha Ha Ha!!","n":4,"val":2000,"cost":1,"disc":0}],"rush":[],"list":"4xOP16-003 4xOP16-014 4xOP16-118 4xOP16-021 4xOP16-017 4xOP17-017 4xOP16-004 4xOP17-005 3xOP13-016 3xOP16-011 4xOP16-015 4xOP17-006 2xOP16-020"},{"id":"OP16-080","name":"Marshall.D.Teach","color":"Black/Yellow","power":5000,"life":4,"decks":3,"total":50,"c2":10,"c1":16,"evs":[],"rush":[],"list":"4xOP16-110 4xOP16-104 4xOP16-108 4xOP16-119 4xOP09-093 4xOP09-099 3xOP16-109 3xEB04-058 3xOP16-103 4xOP17-109 3xOP16-116 3xOP12-112 2xOP14-118 2xOP16-106 2xOP14-112 1xOP16-115"},{"id":"OP11-001","name":"Koby","color":"Red/Black","power":5000,"life":4,"decks":3,"total":50,"c2":12,"c1":19,"evs":[{"name":"Ground Death","n":2,"val":4000,"cost":1,"disc":0}],"rush":[],"list":"4xOP11-004 4xEB03-008 4xEB04-047 4xOP11-008 4xEB04-044 4xOP13-007 4xOP11-082 4xOP11-099 3xPRB02-001 3xEB03-041 4xOP11-092 4xEB05-002 2xOP14-096 2xOP11-018"},{"id":"OP10-003","name":"Sugar","color":"Red/Purple","power":5000,"life":4,"decks":3,"total":49,"c2":4,"c1":8,"evs":[{"name":"Ten-Layer Igloo","n":4,"val":3000,"cost":2,"disc":0},{"name":"Divine Departure","n":3,"val":3000,"cost":0,"disc":1},{"name":"You Need Me, Don't You?!!♡","n":4,"val":2000,"cost":0,"disc":0},{"name":"Bullet String","n":4,"val":2000,"cost":2,"disc":0},{"name":"Slow-Slow Beam Sword","n":3,"val":2000,"cost":2,"disc":0}],"rush":[{"name":"Shanks","n":3,"p":12000,"cost":10,"da":false,"ub":false}],"list":"4xOP10-065 4xOP10-072 4xOP10-071 4xEB05-004 4xOP15-078 4xEB05-040 4xOP14-078 4xOP10-018 3xOP09-004 3xOP07-076 4xEB05-034 2xOP10-078 3xOP13-076 2xEB04-007"}]};
 
 const META_BY={}; META.leaders.forEach(L=>META_BY[L.id]=L);
+// 少見但可能有：環境牌組不到 4 成有放的反擊事件、速攻、補血／效果卡（optcg.one 345 副，2026-11-12）
+const EFX_UI=(()=>{try{return new Function(document.getElementById('engine-src').textContent+';return EFX;')();}catch(e){return {};}})();
+const META_RARE={"OP17-039":"OP14-049:10","OP09-081":"OP09-097:11","OP13-001":"OP10-040:39,OP14-037:34,ST31-004:13,OP05-038:13,OP10-018:8,OP12-037:5,OP13-040:3","OP12-061":"EB03-062:20,EB05-040:10","OP08-058":"OP13-076:33,EB04-058:25,OP06-115:17,OP17-106:8","ST30-001":"OP12-038:10,OP06-017:5,ST01-012:5","OP05-098":"OP14-104:39,OP15-113:26,OP14-118:17,OP17-110:4","OP17-079":"OP17-096:22","OP16-079":"EB05-046:33","OP17-058":"EB04-030:25,OP02-089:25,OP13-076:15,OP17-077:5","OP17-020":"OP17-038:36,OP12-037:14","OP08-098":"OP14-118:25,OP17-104:25,OP17-103:25,OP17-112:25,OP15-078:25,OP17-076:25","OP13-004":"OP17-096:27,OP17-098:20,EB05-046:7","OP16-080":"OP17-114:33","OP14-041":"OP07-056:33","OP16-022":"ST30-012:25,OP12-037:25,OP12-038:25,EB02-030:25","OP09-062":"OP07-076:14,OP14-118:14","OP14-080":"EB05-049:25","OP10-003":"ST10-015:33,OP17-076:33,OP10-019:33","EB05-010":"OP17-112:33,EB04-058:17,OP12-037:17,OP13-040:17","OP09-042":"OP16-058:30"};
+function rareList(side){
+  const d=S[side], raw=d.deck&&d.deck.meta&&META_RARE[d.lid]; if(!raw) return [];
+  return raw.split(',').map(x=>{const [id,pct]=x.split(':'); const c=cardOf(id), f=EFX_UI[id]||null;
+    let kind=null, label='';
+    if(c&&c.type==='ev'&&c.val){kind='ev';label=`反擊事件 ${c.cost}C/+${c.val}${c.disc?'/棄'+c.disc:''}`;}
+    else if(c&&c.type==='char'&&c.rush){kind='rush';label=`速攻 ${c.cost}C/${c.p}`;}
+    if(kind==='ev'&&f&&f.trigLife) label+='；也是觸發補血';
+    else if(f&&(f.life||f.trigLife)){kind='life';label=f.trigLife?'觸發補血':'補血'+(f.don?` ${f.don} DON!!`:'');}
+    else if(f&&f.dpow){kind='fx';label='防守效果（要在場上）';}
+    return kind?{id,pct:+pct,kind,label,name:(c&&c.name)||(f&&f.name)||id}:null;}).filter(Boolean);
+}
+function rareApply(snap,side){   // 勾選「算進去」的少見卡，加進計算用的狀態
+  const d=snap[side], on=(S[side].rareOn||[]); if(!on.length) return;
+  for(const r of rareList(side)){ if(!on.includes(r.id)) continue; const c=cardOf(r.id);
+    if(r.kind==='ev') d.pevs=(d.pevs||[]).concat([{name:c.name,n:1,val:c.val,cost:c.cost,disc:c.disc||0}]);
+    if(r.kind==='rush'){const x={id:r.id,name:c.name,n:1,p:c.p,cost:c.cost,da:c.da,ub:c.ub}; d.deckRush=(d.deckRush||[]).concat([x]); if(side==='op') d.rush=(d.rush||[]).concat([x]);}
+    const ef=EFX_UI[r.id]; if(ef&&ef.trigLife&&r.kind!=='life'){d.deckCnt={...(d.deckCnt||{})}; d.deckCnt[r.id]=(d.deckCnt[r.id]||0)+2;}
+    if(r.kind==='life'){d.deckCnt={...(d.deckCnt||{})}; d.deckCnt[r.id]=(d.deckCnt[r.id]||0)+2; d.deckIds=[...new Set((d.deckIds||[]).concat([r.id]))];}
+  }
+}
+function rareBox(side){
+  const L=rareList(side); if(!L.length) return '';
+  const on=S[side].rareOn||[];
+  return `<div class="sh-t">少見但可能有（不到 4 成牌組有放）</div><div class="rare">${L.map(r=>`<button class="rpick${on.includes(r.id)?' on':''}" id="${side}-rare-${r.id}" data-rare="${r.id}" data-s="${side}" aria-pressed="${on.includes(r.id)}"${r.kind==='fx'?' disabled':''}>
+    <span class="rp">${r.pct}%</span><span class="rn">${r.name}<small>${r.label}</small></span><span class="rt">${r.kind==='fx'?'上場再選角色':on.includes(r.id)?'已算進去':'算進去'}</span></button>`).join('')}</div>
+    <p class="note">百分比＝這個領導者的比賽牌組裡有放這張的比例。按「算進去」：反擊事件當成未知手牌可能有 1 張、速攻當成可能下 1 張、補血觸發當成牌組有 2 張。</p>`;
+}
+
 const imgFor=id=>`https://optcgapi.com/media/static/Card_Images/${id}.jpg`;
 function leaderInfo(id){
   if(!id) return null;
@@ -914,8 +975,8 @@ function leaderInfo(id){
 }
 function applyMeta(side,id){
   const L=META_BY[id]; if(!L) return;
-  const d=S[side]; d.lid=id; d.leader=L.power;   // HP 是對局中的現況，不跟著領導者重設
-  d.deckCnt=parseDeck(L.list); d.deckIds=Object.keys(d.deckCnt);
+  const d=S[side]; d.lid=id; d.leader=L.power; d.ldon=true;   // HP 是對局中的現況，不跟著領導者重設
+  d.deckCnt=parseDeck(L.list); d.deckIds=Object.keys(d.deckCnt); d.rareOn=[];
   const rid=r=>{const hit=d.deckIds.find(x=>{const c=cardOf(x);return c&&c.type==='char'&&c.name===r.name&&c.cost===r.cost;});return hit?{...r,id:hit}:r;};
   L.rush=L.rush.map(rid);
   if(side==='me'){
@@ -1084,8 +1145,8 @@ function renderSheet(){
   };
   if(type==='leader'){
     title=who+'領導者・手牌';
-    body=metaPicker(side)+deckBox(side)+leaderPicker(side)+stepper(`${side}.leader`,'領導者力量',1000,0,20000)+
-      `<div class="st"><span class="stl">能力</span><span class="icos">${ico(`${side}.lda`,'da')}${ico(`${side}.lub`,'ub')}</span></div><div class="sh-t">手牌</div>`+handBody();
+    body=metaPicker(side)+rareBox(side)+deckBox(side)+leaderPicker(side)+stepper(`${side}.leader`,'領導者力量',1000,0,20000)+
+      `<div class="st"><span class="stl">能力</span><span class="icos">${ico(`${side}.lda`,'da')}${ico(`${side}.lub`,'ub')}</span></div>${side==='op'&&EFX_UI[d.lid]&&EFX_UI[d.lid].dpow&&EFX_UI[d.lid].dpow.needLdon?`${d.ldon==null?(d.ldon=true,''):''}<div class="sws">${sw('op.ldon','領導者身上有 DON!!（效果要【DON!!×1】）')}</div>`:''}<div class="sh-t">手牌</div>`+handBody();
   }else if(type==='card'){
     title=`${who}角色${i+1}`; const p=`${side}.chars.${i}`;
     body=charPicker(side,i)+stepper(`${p}.p`,'力量',1000,0,20000)+
@@ -1133,6 +1194,7 @@ document.addEventListener('click',e=>{
   if(t.dataset.pick){pickLeader(t.dataset.s,t.dataset.pick);changed(true);return;}
   if(t.dataset.lclear){S[t.dataset.lclear].lid=null;changed(true);return;}
   if(t.dataset.deckapply){applyDeck(t.dataset.deckapply);renderRush();changed(true);return;}
+  if(t.dataset.rare){const sd=t.dataset.s,id=t.dataset.rare,d=S[sd]; d.rareOn=d.rareOn||[]; const k=d.rareOn.indexOf(id); if(k<0)d.rareOn.push(id); else d.rareOn.splice(k,1); changed(true); const b=$(`${sd}-rare-${id}`); if(b)b.focus(); return;}
   if(t.dataset.deckclear){const sd=t.dataset.deckclear;S[sd].deck=null;S[sd].dlist=null;S[sd].pevs=[];S[sd].deckIds=[];S[sd].deckCnt={};S[sd].deckRush=[];deckMsg[sd]='';changed(true);return;}
   if(t.dataset.open){openSheet(t.dataset.open,t.dataset.s,+(t.dataset.i??-1),t);return;}
   if(t.dataset.rtg!=null){const c=S.me.chars[+t.dataset.rtg]; if(c){c.rest=!c.rest; changed(); const b=$('me-rt'+t.dataset.rtg); if(b)b.focus();} return;}
@@ -1249,6 +1311,7 @@ function compute(){
   const id=++jobId; lastSnap=JSON.parse(JSON.stringify(S));
   // 我方已橫置（這回合攻擊過）：不能再攻擊，對手回合也不能阻擋
   lastSnap.me.chars=lastSnap.me.chars.map(c=>c.rest?{...c,atk:false,blk:false}:c);
+  rareApply(lastSnap,'me'); rareApply(lastSnap,'op');
   const st=$('calcState'); if(st) st.textContent='計算中…';
   if(!worker||busy){ if(worker&&busy){try{worker.terminate();}catch(_){} } worker=makeWorker(); }
   if(worker){ busy=true; worker.postMessage({id,S:lastSnap,budget:3000}); }
@@ -1327,6 +1390,10 @@ function threatHTML(B){
   const TG=B.trig||{};
   if(TG.op) h+=`<div class="banner b-warn"><div class="k">觸發補血風險（對手牌組）</div><p>對手牌組有 ${TG.op.k} 張補血觸發（${TG.op.name}）。最後一張生命剛好是它的機率約 <b>${Math.round(TG.op.p*100)}%</b>：${TG.op.saves?`翻到就<b>擋得住</b>（補 1 血後最省要 ${TG.op.cards} 張）。`:'就算翻到也還是擋不住。'}</p></div>`;
   if(TG.me) h+=`<div class="banner ${TG.me.saves?'b-good':'b-bad'}"><div class="k">觸發補血（你的牌組）</div><p>你牌組有 ${TG.me.k} 張補血觸發（${TG.me.name}）。最後一張生命剛好是它的機率約 <b>${Math.round(TG.me.p*100)}%</b>：${TG.me.saves?'翻到就守得住。':'就算翻到也守不住。'}</p></div>`;
+  if(B.ldonMe===false) h+=`<div class="banner ${B.ldonHint?'b-bad':'b-warn'}"><div class="k">領導者效果要貼 DON!!</div><p>你的領導者效果要【DON!!×1】，但這個配法沒有貼 DON!! 到領導者，對手回合不能用。${B.ldonHint?`<b>領導者貼 1 張${B.ldonHint.r?`、再留 ${B.ldonHint.r} 張 DON!! 不貼`:''}，你下回合就守得住</b>（用 ${B.ldonHint.need} 張）。代價：這回合對手${B.ldonHint.lethal?'還是擋不住':`只要 ${B.ldonHint.minCards} 張就擋得住`}。`:'下回合存活已經照「不能用」計算。'}</p></div>`;
+  else if(B.ldonMe===true) h+=`<p class="hint">這個配法有貼 DON!! 到領導者，對手回合可以用領導者效果（要活躍 DON!! 5 張以下）。</p>`;
+  const RL=rareList('op').filter(r=>r.kind!=='fx'), RO=S.op.rareOn||[];
+  if(RL.length) h+=`<p class="hint">對手牌組少見卡（不到 4 成有放）：${RL.map(r=>`${r.name}（${r.label}，${r.pct}%${RO.includes(r.id)?'，已算進去':''}）`).join('、')}。點對手領導者可以選要不要算進去。</p>`;
   const BK=B.blk;
   if(BK&&BK.uses&&BK.uses.some(u=>u.dies)){
     const nm=ci=>`對手角色${ci+1}（${S.op.chars[ci]?S.op.chars[ci].p:''}）`;
