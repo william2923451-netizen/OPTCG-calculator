@@ -991,7 +991,7 @@ function calcAll(S,budget,post){
 
 </script>
 <script>
-const APP_VERSION='v45';
+const APP_VERSION='v46';
 const S = {
   me:{ leader:5000, lda:false, lub:false, life:2, hand:4, c2:1, c1:2, evs:[], rush:[], don:10, defDon:0, lk:[], lke:[],
        chars:[{p:5000,atk:true,blk:false,da:false,ub:false},{p:7000,atk:true,blk:false,da:false,ub:false},{p:7000,atk:true,blk:false,da:false,ub:false},{p:3000,atk:false,blk:true,da:false,ub:false}] },
@@ -1034,7 +1034,7 @@ function colorBand(color){
 }
 function cardFace(c,cls){
   return `<span class="cface ${cls||''}" style="--band:${colorBand(c.color)}"><span class="cband"></span>
-    ${c.img?`<img src="${c.img}" alt="" loading="lazy" onerror="this.remove()">`:''}
+    ${c.img?`<img src="${c.img}" alt="" loading="lazy" onerror="imgErr(this)">`:''}
     <span class="cname">${c.name}</span></span>`;
 }
 function leaderPicker(side){
@@ -1157,7 +1157,10 @@ function rareBox(side){
     <p class="note">百分比＝這個領導者的比賽牌組裡有放這張的比例。按「算進去」：反擊事件當成未知手牌可能有 1 張、速攻當成可能下 1 張、補血觸發當成牌組有 2 張。</p>`;
 }
 
-const imgFor=id=>`https://optcgapi.com/media/static/Card_Images/${id}.jpg`;
+// 卡圖：先用 optcg.one 的圖庫（有新彈），載入失敗再退回 optcgapi
+const imgFor=id=>`https://img.optcg.one/cards/${String(id).split('-')[0]}/${id}.webp`;
+const imgAlt=src=>{const m=/\/cards\/[^/]+\/([^/]+)\.webp$/.exec(src||''); return m?`https://optcgapi.com/media/static/Card_Images/${m[1]}.jpg`:'';};
+function imgErr(el){const a=imgAlt(el.src); if(a&&!el.dataset.alt){el.dataset.alt=1; el.src=a;} else el.remove();}
 function leaderInfo(id){
   if(!id) return null;
   if(CARDS&&CARDS[id]) return CARDS[id];
@@ -1298,7 +1301,7 @@ function cardTile(side,i,asSpan){
   const don=donFor(side,i);
   const name=L?'領導者':'角色'+(i+1);
   const lc=L?leaderInfo(d.lid):(c.cid&&META_CHARS[c.cid]?{...META_CHARS[c.cid],img:imgFor(c.cid)}:null);
-  const inner=`${lc&&lc.img?`<img class="limg" src="${lc.img}" alt="" onerror="this.remove()">`:''}<span class="cl">${lc?lc.name:name}</span><span class="pw">${c.p}</span>
+  const inner=`${lc&&lc.img?`<img class="limg" src="${lc.img}" alt="" onerror="imgErr(this)">`:''}<span class="cl">${lc?lc.name:name}</span><span class="pw">${c.p}</span>
     <span class="bd">${b.map(x=>x[0]==='!'?`<i class="ubb">${x.slice(1)}</i>`:`<i>${x}</i>`).join('')}</span>${don?`<span class="don">+${don}</span>`:''}`;
   const cls=`card${L?' leader':''}${!L&&!c.atk?' rest':''}${!L&&c.rest?' rested':''}`;
   if(asSpan) return `<span class="${cls}">${inner}</span>`;
@@ -1324,7 +1327,7 @@ function renderZone(side){
   const hp=(pos)=>`<button class="stat hp ${pos}" id="${side}-st-life" data-open="life" data-s="${side}"><span class="l">HP</span><span class="v">${d.life}</span><span class="s">${(()=>{const k=(d.lk||[]).slice(0,d.life).filter(v=>v==='e'||v>0);return k.length?'已知 '+k.map(v=>v==='e'?'事件':v/1000+'k').join(' '):'生命';})()}</span></button>`;
   const dn=(pos)=>`<button class="stat dn ${pos}" id="${side}-st-don" data-open="don" data-s="${side}"><span class="donbg" style="background-image:url('${DON_IMG}')"></span><span class="l">${me?'可貼DON!!':'剩餘DON!!'}</span><span class="v">${me?d.don:d.defDon}</span><span class="s">${me?'這回合':'下回合 '+d.nextDon}</span></button>`;
   const on=ldonOn(side);
-  const tuck=needLdon(side)?`<button class="tuck${on?' on':''}" id="${side}-ldon" data-ldon="${side}" aria-pressed="${on}" aria-label="${me?'我方':'對手'}領導者下面${on?'貼了 1 張 DON!!，點一下拿掉':'沒有 DON!!，點一下貼 1 張'}">${on?`<img src="${DON_IMG}" alt="" onerror="this.remove()">`:''}<span>${on?'DON!!×1':'沒貼 DON!!'}</span></button>`:'';
+  const tuck=needLdon(side)?`<button class="tuck${on?' on':''}" id="${side}-ldon" data-ldon="${side}" aria-pressed="${on}" aria-label="${me?'我方':'對手'}領導者下面${on?'貼了 1 張 DON!!，點一下拿掉':'沒有 DON!!，點一下貼 1 張'}">${on?`<img src="${DON_IMG}" alt="" onerror="imgErr(this)">`:''}<span>${on?'DON!!×1':'沒貼 DON!!'}</span></button>`:'';
   const leadw=me?`<div class="leadw">${tuck}${lead}</div>`:`<div class="leadw">${lead}${tuck}</div>`;
   $('zone-'+side).innerHTML=me
     ?`<div class="chars">${slots.join('')}</div><div class="top">${hp('sl')+leadw+dn('sr')}</div>`
