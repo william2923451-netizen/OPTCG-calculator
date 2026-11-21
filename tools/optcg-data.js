@@ -2,7 +2,7 @@
 // 瀏覽器和 Node 都能用：buildData(raw) → data.json 的內容
 (function (root) {
   // 計算器有寫效果的卡（少見卡清單要列出它們）
-  const FX_IDS = new Set('OP06-115 EB04-058 EB05-055 OP08-109 OP14-112 OP15-113 OP16-119 OP16-108 OP14-104 OP17-061 OP17-103 OP17-104 OP17-106 OP17-112 OP17-114 OP17-040 OP17-049 OP17-048 EB05-046 OP16-015 OP16-003 ST30-012 OP17-022 OP17-044 ST25-002 PRB02-001'.split(' '));
+  const FX_IDS = new Set('OP18-011 OP18-030 OP18-071 OP18-027 OP18-046 OP18-099 OP18-100 ST34-004 OP06-115 EB04-058 EB05-055 OP08-109 OP14-112 OP15-113 OP16-119 OP16-108 OP14-104 OP17-061 OP17-103 OP17-104 OP17-106 OP17-112 OP17-114 OP17-040 OP17-049 OP17-048 EB05-046 OP16-015 OP16-003 ST30-012 OP17-022 OP17-044 ST25-002 PRB02-001'.split(' '));
   const base = id => String(id).split('_')[0];
   const num = v => (v == null || v === '' || isNaN(+v)) ? 0 : +v;
 
@@ -12,7 +12,7 @@
       const id = base(x[0]); if (info[id]) continue;
       const eff = (x[11] || '').replace(/<br>/g, ' ');
       info[id] = { id, type: String(x[3] || '').toUpperCase(), name: String(x[4] || '').slice(0, 28), cost: num(x[5]),
-        power: num(x[7]), counter: num(x[8]), color: x[9] || '', eff, trig: x[14] || '', life: num(x[13]) };
+        power: num(x[7]), counter: num(x[8]), color: x[9] || '', types: x[10] || '', eff, trig: x[14] || '', life: num(x[13]) };
     }
     return info;
   }
@@ -23,32 +23,43 @@
     const d = m[1].match(/trash (\d+) cards? from your hand/i);
     return { val: +v[1], disc: d ? +d[1] : 0 };
   }
-  const flags = c => (/\[Blocker\]/.test(c.eff) ? 'b' : '') + (/\[Double Attack\]/.test(c.eff) ? 'd' : '') + (/\[Rush\]/.test(c.eff) ? 'r' : '') + (/\[Unblockable\]/.test(c.eff) ? 'u' : '');
+  // 自己有速攻：卡文開頭或「[DON!! x1] [Rush]」這種關鍵字，或寫「this Character gains [Rush]」；給別的角色速攻的不算
+  const hasRush = c => /(^|\]\s*)\[Rush\](?!:)/.test(c.eff.replace(/\([^)]*\)/g, '')) && !/gains? \[Rush\]/.test(c.eff.split('[Rush]')[0].slice(-12)) || /this Character gains \[Rush\]/i.test(c.eff);
+  const flags = c => (/\[Blocker\]/.test(c.eff) ? 'b' : '') + (/\[Double Attack\]/.test(c.eff) ? 'd' : '') + (hasRush(c) ? 'r' : '') + (/\[Unblockable\]/.test(c.eff) ? 'u' : '');
 
   function buildData(raw, opts) {
     opts = opts || {};
     const info = cardInfo(raw.cards.data);
     const fmts = Object.keys(raw.decklists || {}).sort();
-    const fmt = opts.fmt || fmts[fmts.length - 1];
-    const decks = (raw.decklists[fmt] || []).filter(d => d.leader_id && d['Deck Composition']);
-    const by = {};
-    for (const d of decks) (by[d.leader_id] = by[d.leader_id] || []).push(d['Deck Composition']);
+    const tourFmt = opts.fmt || fmts[fmts.length - 1];
+    const decks = (raw.decklists[tourFmt] || []).filter(d => d.leader_id && d['Deck Composition']);
+    // OPTCGSim 的牌組（依使用人數加權）：比賽資料還沒有新彈時，用它代表新環境
+    const setNo = id => { const m = /^OP(\d+)-/.exec(id); return m ? +m[1] : 0; };
+    const tourNo = setNo(tourFmt + '-'), sim = raw.simDecklists || [];
+    const newest = Math.max(0, ...sim.flatMap(s => s.decks.flatMap(d => [...d.composition.matchAll(/OP(\d+)-/g)].map(m => +m[1]))));
+    const useSim = opts.useSim != null ? opts.useSim : newest > tourNo;
+    const fmt = useSim ? 'OP' + String(newest).padStart(2, '0') : tourFmt;
+    const by = {}, src = {};
+    for (const d of decks) (by[d.leader_id] = by[d.leader_id] || []).push({ comp: d['Deck Composition'], w: 1 });
+    if (useSim) for (const s of sim) { if (!s.decks.length) continue; by[s.leader] = s.decks.map(d => ({ comp: d.composition, w: Math.max(1, d.pilots || 1) })); src[s.leader] = 'sim'; }
     const leaders = [], rare = {}, used = new Set();
     for (const lid in by) {
       const list = by[lid], cnt = {};
-      for (const comp of list) {
-        const seen = {};
+      let W = 0;
+      for (const { comp, w } of list) {
+        W += w; const seen = {};
         for (const m of comp.matchAll(/(\d+)\s*x\s*([A-Z0-9]+-\d+)/gi)) { const id = base(m[2].toUpperCase()); if (id === lid) continue; seen[id] = (seen[id] || 0) + (+m[1]); }
-        for (const id in seen) { cnt[id] = cnt[id] || { n: 0, c: 0 }; cnt[id].n++; cnt[id].c += seen[id]; }
+        for (const id in seen) { cnt[id] = cnt[id] || { n: 0, c: 0 }; cnt[id].n += w; cnt[id].c += seen[id] * w; }
       }
       const N = list.length;
-      const freq = Object.entries(cnt).map(([id, v]) => ({ id, pct: Math.round(v.n / N * 100), avg: v.c / v.n })).sort((a, b) => b.pct - a.pct || b.avg - a.avg);
+      const freq = Object.entries(cnt).map(([id, v]) => ({ id, pct: Math.round(v.n / W * 100), avg: v.c / v.n })).sort((a, b) => b.pct - a.pct || b.avg - a.avg);
       freq.forEach(f => used.add(f.id));
       const L = info[lid] || { name: lid, power: 5000, life: 4, color: '' };
       // 少見卡：不到 4 成有放、跟計算有關
-      const rr = freq.filter(f => f.pct < 40).filter(f => { const c = info[f.id]; return FX_IDS.has(f.id) || (c && (counterOf(c) || (/CHARACTER/.test(c.type) && /\[Rush\]/.test(c.eff)))); });
+      const rr = freq.filter(f => f.pct < 40).filter(f => { const c = info[f.id]; return FX_IDS.has(f.id) || (c && (counterOf(c) || (/CHARACTER/.test(c.type) && hasRush(c)))); });
       if (rr.length) rare[lid] = rr.map(f => f.id + ':' + f.pct).join(',');
       if (N < (opts.minDecks || 1)) continue;
+      const karoo = lid === 'OP18-001', franky = lid === 'OP18-021';   // OP18 領導者：Karoo 給 Animal＋Alabasta 角色速攻 +1000；Franky 讓手上的 Stage 有 +3000 反擊
       // 共識牌組：4 成以上的牌組有放，張數取平均
       // 依比例由高到低放進去，總張數不超過 50
       const core = []; let room = 50;
@@ -58,26 +69,29 @@
         const c = info[f.id]; total += f.n; if (!c) continue;
         if (/CHARACTER/.test(c.type)) {
           if (c.counter === 2000) c2 += f.n; else if (c.counter === 1000) c1 += f.n;
-          if (/\[Rush\]/.test(c.eff)) rush.push({ name: c.name, n: f.n, p: c.power, cost: c.cost, da: /\[Double Attack\]/.test(c.eff), ub: /\[Unblockable\]/.test(c.eff) });
+          const ka = karoo && /Animal/.test(c.types) && /Alabasta/.test(c.types);
+          if (hasRush(c) || ka) rush.push({ id: f.id, name: c.name, n: f.n, p: c.power + (ka ? 1000 : 0), cost: c.cost, da: /\[Double Attack\]/.test(c.eff), ub: /\[Unblockable\]/.test(c.eff) });
         }
+        if (franky && /STAGE/.test(c.type)) evs.push({ id: f.id, name: c.name + '（Stage）', n: f.n, val: 3000, cost: 0, disc: 0, stage: 1 });
         const ce = counterOf(c); if (ce) evs.push({ id: f.id, name: c.name, n: f.n, val: ce.val, cost: c.cost, disc: ce.disc });
       }
       evs.sort((a, b) => b.val - a.val || a.cost - b.cost);
-      leaders.push({ id: lid, name: L.name, color: L.color, power: L.power || 5000, life: L.life || 4, decks: N, total, c2, c1, evs, rush,
+      leaders.push({ id: lid, name: L.name, color: L.color, power: L.power || 5000, life: L.life || 4, decks: N, src: src[lid] || 'tour', pilots: W, total, c2, c1, evs, rush,
         all: freq.map(f => f.id + ':' + f.pct).join(','),   // 這個領導者的牌組出現過的全部卡片＋比例
         list: core.slice().sort((a, b) => b.n - a.n).map(f => f.n + 'x' + f.id).join(' ') });
     }
-    leaders.sort((a, b) => b.decks - a.decks);
+    leaders.sort((a, b) => b.pilots - a.pilots);
     // 卡片資料：牌組裡出現過的角色、反擊事件、領導者
     const ch = {}, ev = {}, ld = {};
     for (const id in info) {
       const c = info[id];
       if (/LEADER/.test(c.type)) { ld[id] = [c.name, c.power / 1000, c.life || 4]; continue; }
       if (!used.has(id)) continue;
-      if (/CHARACTER/.test(c.type)) ch[id] = [c.name, c.power / 1000, c.cost, c.counter / 1000, flags(c)];
+      if (/CHARACTER/.test(c.type)) ch[id] = [c.name, c.power / 1000, c.cost, c.counter / 1000, flags(c), c.types];
+      else if (/STAGE/.test(c.type)) ev[id] = [c.name + '（Stage）', 0, 3, 0, 's'];   // 只有 Franky 領導者時算反擊
       else { const ce = counterOf(c); if (ce) ev[id] = [c.name, c.cost, ce.val / 1000, ce.disc]; }
     }
-    return { v: 2, date: opts.date || new Date().toISOString().slice(0, 10), fmt, n: decks.length, leaders, ch, ev, ld, rare };
+    return { v: 3, date: opts.date || new Date().toISOString().slice(0, 10), fmt, src: useSim ? 'sim' : 'tour', tourFmt, n: decks.length, simPilots: useSim ? sim.reduce((a, s) => a + s.decks.reduce((b, d) => b + (d.pilots || 0), 0), 0) : 0, leaders, ch, ev, ld, rare };
   }
   function extractRaw(html) {   // 從 /decklists 的 HTML 抽出內嵌 JSON
     const m = html.match(/<script type="application\/json" id="decklists-initial-data">([\s\S]*?)<\/script>/);
