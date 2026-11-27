@@ -177,6 +177,7 @@ body[data-mode="detail"] .simple{display:none}
 .sw[aria-pressed="true"] i{background:var(--c)}
 .sw[aria-pressed="true"] i::after{transform:translateX(14px)}
 .lkrow{display:flex;flex-direction:column;gap:4px}
+.lkrow.ph{opacity:.3;pointer-events:none}
 .lkev{justify-content:flex-end}
 .seg{display:inline-flex;border:1px solid var(--line);border-radius:8px;overflow:hidden}
 .seg button{border:none;border-left:1px solid var(--line);background:var(--bg);font-family:var(--f-num);font-size:13px;font-weight:700;padding:8px 8px;min-width:38px;color:var(--muted)}
@@ -991,7 +992,7 @@ function calcAll(S,budget,post){
 
 </script>
 <script>
-const APP_VERSION='v46';
+const APP_VERSION='v47';
 const S = {
   me:{ leader:5000, lda:false, lub:false, life:2, hand:4, c2:1, c1:2, evs:[], rush:[], don:10, defDon:0, lk:[], lke:[],
        chars:[{p:5000,atk:true,blk:false,da:false,ub:false},{p:7000,atk:true,blk:false,da:false,ub:false},{p:7000,atk:true,blk:false,da:false,ub:false},{p:3000,atk:false,blk:true,da:false,ub:false}] },
@@ -1423,8 +1424,9 @@ function renderSheet(){
     while(d.lk.length<d.life) d.lk.push(-1);
     const opts=[[-1,'未知'],[0,'0'],[1000,'1k'],[2000,'2k'],['e','事件']];
     body=stepper(`${side}.life`,'剩餘生命',1,0,10)+'<p class="note">生命 0 時再被打中一次就輸。</p>'+
-      (d.life?`<div class="sh-t">已知的生命卡反擊值　<span style="font-weight:400;letter-spacing:0">由上往下，吃血先拿最上面</span></div>`+
-      Array.from({length:d.life},(_,q)=>{
+      (true?`<div class="sh-t">已知的生命卡反擊值　<span style="font-weight:400;letter-spacing:0">由上往下，吃血先拿最上面</span></div>`+
+      Array.from({length:Math.max(LIFE_SLOTS,d.life)},(_,q)=>{
+        if(q>=d.life) return `<div class="lkrow ph" aria-hidden="true"><div class="st"><span class="stl">第 ${q+1} 張</span><span class="seg">${opts.map(([,l])=>`<button tabindex="-1" disabled>${l}</button>`).join('')}</span></div></div>`;
         if(d.lk[q]==='e'&&!d.lke[q]) d.lke[q]={val:2000,cost:1,disc:0};
         const ev=d.lk[q]==='e'?`<div class="evfmt lkev"><input type="number" inputmode="numeric" id="${side}-lke${q}-cost" data-set="${side}.lke.${q}.cost" data-min="0" data-max="10" value="${d.lke[q].cost}" aria-label="第${q+1}張生命事件費用"><span>C</span><span class="sep">/</span><input type="number" inputmode="numeric" class="w" step="1000" id="${side}-lke${q}-val" data-set="${side}.lke.${q}.val" data-min="0" data-max="10000" value="${d.lke[q].val}" aria-label="第${q+1}張生命事件力量"><span class="sep">/</span><span>棄</span><input type="number" inputmode="numeric" id="${side}-lke${q}-disc" data-set="${side}.lke.${q}.disc" data-min="0" data-max="5" value="${d.lke[q].disc||0}" aria-label="第${q+1}張生命事件要棄幾張手牌"></div>`:'';
         return `<div class="lkrow"><div class="st"><span class="stl">第 ${q+1} 張${q===0?'（最上面）':''}</span><span class="seg" role="group" aria-label="第${q+1}張生命卡">${
@@ -1436,11 +1438,16 @@ function renderSheet(){
            :stepper('op.defDon','現在剩餘DON!!（付反擊事件）',1,0,ldonOn('op')?9:10)+(ldonOn('op')?'<p class="note">領導者下面貼了 1 張 DON!!，剩餘最多 9 張。</p>':'')+stepper('op.nextDon','下回合可貼DON!!',1,0,10)+stepper('op.play','下回合預估打出幾張牌',1,0,10)+'<p class="note">「打出幾張」只用來估計對手進入你下一次攻擊時還剩幾張手牌。</p>';
   }
   const keep=document.activeElement&&document.activeElement.id;
+  const sh=$('sheet'), lock=sh.offsetHeight;
   $('sheet-in').innerHTML=`<div class="sh-head"><h2 id="sh-title">${title}</h2><button class="done" id="sh-done" data-close="1">完成</button></div>${body}`;
   const f=keep&&$(keep); if(f&&$('sheet').contains(f)) f.focus();
+  if(sheetLock&&lock>sh.offsetHeight) sh.style.minHeight=lock+'px';
+  sheetLock=true;
 }
+let sheetLock=false;
+const LIFE_SLOTS=5;
 function openSheet(type,side,i,btn){
-  sheet={type,side,i};opener=btn&&btn.id;renderSheet();$('scrim').hidden=false;$('sheet').hidden=false;$('sh-done').focus();
+  sheet={type,side,i};opener=btn&&btn.id;sheetLock=false;$('sheet').style.minHeight='';renderSheet();$('scrim').hidden=false;$('sheet').hidden=false;$('sh-done').focus();
 }
 function closeSheet(){
   sheet=null;$('scrim').hidden=true;$('sheet').hidden=true;const o=opener&&$(opener);if(o)o.focus();
