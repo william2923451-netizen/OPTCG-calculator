@@ -800,3 +800,5 @@
 少見但可能有（	Rare but possible (	珍しいが入っているかも（
 對手牌組少見卡（	Rare cards in opponent's deck (	相手デッキの珍しいカード（
 ）：選環境牌組時，	): when choosing a meta deck, cards in	）：環境デッキを選ぶと、
+確認	Apply	確定
+卡片語言會切換卡名和卡圖。選好後按「確認」才會套用並重新整理，盤面不會不見。	Card language switches card names and images. Changes apply when you tap "Apply"; the page reloads and your board is kept.	カード言語はカード名と画像を切り替えます。選んだら「確定」を押すと適用され、ページを再読み込みします。盤面は消えません。

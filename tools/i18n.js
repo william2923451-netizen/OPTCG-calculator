@@ -15,11 +15,15 @@ const I18N=(()=>{
 })();
 function setLang(ui,card){try{localStorage.setItem('optcg-lang',JSON.stringify({ui,card}));}catch(_){} location.reload();}
 const LANG_NAMES={zh:'繁體中文',ja:'日本語',en:'English'};
+let LANG_PEND=null;
 function settingsBody(){
+  const P=LANG_PEND||(LANG_PEND={ui:I18N.ui,card:I18N.card});
   const seg=(key,cur,opts)=>`<span class="seg notr" role="group">${opts.map(v=>`<button id="set-${key}-${v}" data-${key}="${v}" aria-pressed="${cur===v}">${LANG_NAMES[v]}</button>`).join('')}</span>`;
-  return `<div class="st"><span class="stl">介面語言</span>${seg('uilang',I18N.ui,['zh','ja','en'])}</div>
-    <div class="st"><span class="stl">卡片語言</span>${seg('cardlang',I18N.card,['en','ja'])}</div>
-    <p class="note">卡片語言會切換卡名和卡圖。切換後頁面會重新整理，盤面不會不見。</p>`;
+  const changed=P.ui!==I18N.ui||P.card!==I18N.card;
+  return `<div class="st"><span class="stl">介面語言</span>${seg('uilang',P.ui,['zh','ja','en'])}</div>
+    <div class="st"><span class="stl">卡片語言</span>${seg('cardlang',P.card,['en','ja'])}</div>
+    <p class="note">卡片語言會切換卡名和卡圖。選好後按「確認」才會套用並重新整理，盤面不會不見。</p>
+    <button class="${changed?'primary':'ghost'} langok" id="set-langok" data-langok="1">確認</button>`;
 }
 
 /* ---- 文字翻譯 ---- */
